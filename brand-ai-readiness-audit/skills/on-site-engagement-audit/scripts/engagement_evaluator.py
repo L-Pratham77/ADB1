@@ -151,7 +151,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": f"Found {len(h1_list)} separate <h1> tags: {h1_list[:2]}... Competing primary headlines dilute topical focus.",
             "suggested_action": {
                 "summary": "Consolidate into a single canonical <h1> and demote secondary headlines to <h2>.",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": "Retain exactly one canonical <h1> in the hero section and demote all other section headlines to <h2>."
             }
         })
     else:
@@ -165,7 +166,8 @@ def run_engagement_audit(target_url, raw_html=None):
                 "evidence": f"Primary heading has only {len(words)} word(s). Fails to convey a complete value proposition.",
                 "suggested_action": {
                     "summary": "Expand the <h1> to explicitly state the category, core benefit, and target user.",
-                    "priority": "medium"
+                    "priority": "medium",
+                    "remediation_details": "Update <h1> to include a clear benefit and category statement (e.g., 'Automated Cloud Telemetry & AI Readiness Auditing for Enterprise Engineering Teams')."
                 }
             })
         elif len(words) > 25:
@@ -175,7 +177,8 @@ def run_engagement_audit(target_url, raw_html=None):
                 "evidence": f"Primary heading contains {len(words)} words, increasing cognitive load and reading friction.",
                 "suggested_action": {
                     "summary": "Shorten the <h1> to 6–12 impactful words and move explanatory details into a subheadline.",
-                    "priority": "low"
+                    "priority": "low",
+                    "remediation_details": "Place the core value proposition in <h1> (6–12 words) and move secondary qualifications into a companion <p class='hero-subtext'>."
                 }
             })
 
@@ -194,7 +197,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": f"Detected jumps in heading hierarchy: {skipped_levels[:2]} (e.g. H{skipped_levels[0][0]} directly to H{skipped_levels[0][1]}).",
             "suggested_action": {
                 "summary": "Maintain sequential heading progression (H1 -> H2 -> H3) for accessibility and document scannability.",
-                "priority": "low"
+                "priority": "low",
+                "remediation_details": "Re-level heading tags sequentially so an <h2> is followed by an <h3> rather than jumping directly to an <h4> or <h5>."
             }
         })
 
@@ -217,7 +221,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": "Audited interactive elements; found 0 prominent action buttons or CTA links. Arriving visitors have no clear next step.",
             "suggested_action": {
                 "summary": "Place a prominent, high-contrast Call-to-Action button above the fold (e.g. 'Start Free Trial' or 'Book a Demo').",
-                "priority": "high"
+                "priority": "high",
+                "remediation_details": "Add an above-the-fold conversion element: <a href='/signup' class='btn btn-primary'>Start Free 14-Day Trial</a>."
             }
         })
     elif vague_ctas_found and not actionable_ctas:
@@ -227,7 +232,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": f"Buttons rely on low-information phrases like '{vague_ctas_found[0]}' instead of specifying the tangible outcome or offer.",
             "suggested_action": {
                 "summary": "Replace generic labels with outcome-oriented copy (e.g., change 'Learn More' to 'Explore Interactive Demo').",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": "Replace generic copy like 'Click Here' or 'Learn More' with tangible value triggers like 'Start Free Tier' or 'Request 15-Minute Architecture Review'."
             }
         })
 
@@ -240,7 +246,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": f"Discovered {len(long_paragraphs)} paragraph(s) exceeding 95 words without structural breaks. Increases reader drop-off.",
             "suggested_action": {
                 "summary": "Break long text blocks into 2–3 sentence paragraphs supplemented by bulleted lists or callout cards.",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": "Split paragraphs exceeding 90 words into 2-3 sentence blocks, utilizing <ul> bullet points and bold leading terms to support F-pattern reading."
             }
         })
 
@@ -252,7 +259,8 @@ def run_engagement_audit(target_url, raw_html=None):
             "evidence": "Page lacks an explicit <nav> element. Makes secondary exploration difficult for visitors seeking additional context.",
             "suggested_action": {
                 "summary": "Wrap header navigation in a semantic <nav> element with links to Home, Products, Docs, and Pricing.",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": "Enclose header menu links in a semantic <nav aria-label='Main Navigation'> element: <nav><ul><li><a href='/'>Home</a></li><li><a href='/products'>Products</a></li><li><a href='/pricing'>Pricing</a></li></ul></nav>."
             }
         })
 

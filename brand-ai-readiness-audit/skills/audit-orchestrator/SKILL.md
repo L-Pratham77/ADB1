@@ -31,14 +31,16 @@ The designated entrypoint skill for the Brand AI-Readiness Audit Marketplace. It
 2. **Execute Domain Audits**:
    - **Crawl & Render**: Invoke `crawl-render-audit` to detect AI bot directives in `robots.txt`, HTTP headers (`X-Robots-Tag`), meta tags, and client-side rendering (CSR) hydration gaps.
    - **Structured Data & Entity Authority**: Invoke `structured-data-entity-audit` to inspect Schema.org JSON-LD, entity disambiguation via `sameAs`, and product/pricing schemas.
-   - **Content Quotability & RAG Retrieval**: Invoke `content-quotability-audit` to assess fact-to-jargon ratio, non-text locked facts, definition statements, and `/llms.txt`.
+   - **Content Quotability & RAG Retrieval**: Invoke `content-quotability-audit` to assess fact-to-jargon ratio, non-text locked facts, definition statements, OpenGraph citation tags, and `/llms.txt`.
    - **On-Site Engagement & Retention**: Invoke `on-site-engagement-audit` to evaluate above-the-fold value proposition, CTA clarity, heading hierarchy, and cognitive friction.
 3. **Harmonize & Deduplicate**:
-   - Combine all findings, remove duplicate or overlapping alerts, and assign unique sequential identifiers (`F-001`, `F-002`, ...).
+   - Combine all findings, remove duplicate or overlapping alerts, harmonize cross-skill findings (such as consolidated H1 orientation alerts), and assign unique sequential identifiers (`F-001`, `F-002`, ...).
    - Order findings deterministically by severity (`critical` -> `high` -> `medium` -> `low`).
-4. **Synthesize Proactive Improvements**:
+4. **Compute Scores & Sub-Scores**:
+   - Calculate the composite `ai_readiness_score` (0–100) and domain sub-scores for `discoverability` and `engagement`.
+5. **Synthesize Proactive Improvements**:
    - Generate proactive recommendations that strengthen AI discoverability and engagement even where no defect was detected (e.g. curated `/llms.txt` and Wikidata entity linking).
-5. **Enforce Schema & Emit Report**:
+6. **Enforce Schema & Emit Report**:
    - Compute severity totals (`total_findings`, `critical`, `high`, `medium`, `low`).
    - Validate structure against [`references/audit_report_schema.json`](references/audit_report_schema.json).
    - Emit standard JSON output.
@@ -54,17 +56,23 @@ Emits the standardized audit report matching the hackathon specification:
     "critical": 1,
     "high": 2,
     "medium": 3,
-    "low": 0
+    "low": 0,
+    "ai_readiness_score": 67,
+    "scores": {
+      "discoverability": 65,
+      "engagement": 70
+    }
   },
   "findings": [
     {
       "id": "F-001",
       "title": "No JSON-LD structured data on product pages",
       "severity": "high",
-      "evidence": "Crawled 12 product pages; 0/12 contain schema.org markup.",
+      "evidence": "Crawled product page; contains 0 schema.org markup blocks.",
       "suggested_action": {
         "summary": "Add Product/Offer JSON-LD to every product page.",
-        "priority": "high"
+        "priority": "high",
+        "remediation_details": "<script type=\"application/ld+json\">{\"@context\": \"https://schema.org\", \"@type\": \"Product\", \"name\": \"...\"}</script>"
       }
     }
   ],

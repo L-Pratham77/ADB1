@@ -1,0 +1,91 @@
+python run_audit.py https://example.com
+
+Optional 1-Run Flags:
+Save to a file:
+bash
+python run_audit.py https://example.com --output report.json
+View as Markdown:
+bash
+python run_audit.py https://example.com --format markdown
+
+
+=================================================================
+
+PREREQUISITES:
+--------------
+- Python 3.8 or higher.
+- Zero external dependencies required!
+  (Uses standard Python libraries: urllib, json, html.parser, re, ssl, unittest).
+
+
+================================================================================
+1. RUNNING THE AUTOMATED TEST SUITE (13 UNIT & INTEGRATION TESTS)
+================================================================================
+To verify all skill checks, agentskills.io format compliance, marketplace manifest,
+and end-to-end orchestration against mock fixtures:
+
+From workspace root (ADB1):
+    python brand-ai-readiness-audit/test_runner.py
+
+From inside brand-ai-readiness-audit folder:
+    cd brand-ai-readiness-audit
+    python test_runner.py
+
+
+================================================================================
+2. RUNNING A LIVE AUDIT (ENTRYPOINT SKILL)
+================================================================================
+The entrypoint skill is "audit-orchestrator", which coordinates all 4 domain skills,
+harmonizes overlapping findings, and produces the required audit report.
+
+A. Basic Audit (Prints JSON report directly to terminal):
+    python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py https://example.com
+
+B. Save Results to a JSON File:
+    python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py https://example.com --output my_report.json
+
+C. View as Executive Markdown Summary:
+    python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py https://example.com --format markdown
+
+D. Save JSON and Display Markdown Simultaneously:
+    python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py https://example.com -o audit_report.json --format both
+
+
+================================================================================
+3. RUNNING IN OFFLINE / SANDBOX MODE
+================================================================================
+If testing in a sandbox environment without internet connectivity, you can provide
+local HTML and robots.txt files:
+
+    python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py example.com --offline-html /path/to/page.html --offline-robots /path/to/robots.txt
+
+
+================================================================================
+4. RUNNING INDIVIDUAL DOMAIN SKILLS DIRECTLY
+================================================================================
+Each skill is independently runnable in true agentskills.io format:
+
+A. Crawl & Render Audit (Robots.txt, WAF challenges, CSR hydration gaps):
+    python brand-ai-readiness-audit/skills/crawl-render-audit/scripts/crawler.py https://example.com
+
+B. Structured Data & Entity Audit (JSON-LD, Organization, sameAs, Pricing):
+    python brand-ai-readiness-audit/skills/structured-data-entity-audit/scripts/schema_inspector.py https://example.com
+
+C. Content Quotability Audit (RAG retrieval, locked facts, buzzword bloat):
+    python brand-ai-readiness-audit/skills/content-quotability-audit/scripts/quotability_analyzer.py https://example.com
+
+D. On-Site Engagement Audit (3-second value proposition, CTAs, readability):
+    python brand-ai-readiness-audit/skills/on-site-engagement-audit/scripts/engagement_evaluator.py https://example.com
+
+
+================================================================================
+5. RE-PACKAGING & VERIFYING SUBMISSION ZIP
+================================================================================
+To run the automated tests, verify agentskills.io compliance, and rebuild the
+hackathon submission archive (< 50 MB):
+
+    python brand-ai-readiness-audit/package_submission.py
+
+Output:
+    brand-ai-readiness-audit.zip (57 KB)
+================================================================================

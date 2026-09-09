@@ -103,52 +103,64 @@ def run_full_audit(target_input, raw_html=None, raw_robots=None):
     try:
         from crawler import run_crawl_audit
         crawl_findings = run_crawl_audit(target_url, raw_html=cached_html, raw_robots=cached_robots)
+        for f in crawl_findings:
+            f["area"] = "AI Discoverability"
         all_findings.extend(crawl_findings)
     except Exception as e:
         all_findings.append({
             "title": "Crawl & Render audit encountered execution exception",
             "severity": "low",
+            "area": "AI Discoverability",
             "evidence": str(e),
-            "suggested_action": {"summary": "Verify network connectivity and retry.", "priority": "low"}
+            "suggested_action": {"summary": "Verify network connectivity and retry.", "priority": "low", "remediation_details": "Ensure target URL is reachable via HTTPS."}
         })
 
     # 3. Execute Skill 2: Structured Data & Entity Authority Audit
     try:
         from schema_inspector import run_schema_audit
         schema_findings = run_schema_audit(target_url, raw_html=cached_html)
+        for f in schema_findings:
+            f["area"] = "AI Discoverability"
         all_findings.extend(schema_findings)
     except Exception as e:
         all_findings.append({
             "title": "Structured Data audit encountered execution exception",
             "severity": "low",
+            "area": "AI Discoverability",
             "evidence": str(e),
-            "suggested_action": {"summary": "Verify JSON-LD parser and retry.", "priority": "low"}
+            "suggested_action": {"summary": "Verify JSON-LD parser and retry.", "priority": "low", "remediation_details": "Ensure structured data is valid JSON."}
         })
 
     # 4. Execute Skill 3: Content Quotability & RAG Retrieval Audit
     try:
         from quotability_analyzer import run_quotability_audit
         quotability_findings = run_quotability_audit(target_url, raw_html=cached_html)
+        for f in quotability_findings:
+            f["area"] = "AI Discoverability"
         all_findings.extend(quotability_findings)
     except Exception as e:
         all_findings.append({
             "title": "Content Quotability audit encountered execution exception",
             "severity": "low",
+            "area": "AI Discoverability",
             "evidence": str(e),
-            "suggested_action": {"summary": "Verify content tokenizer and retry.", "priority": "low"}
+            "suggested_action": {"summary": "Verify content tokenizer and retry.", "priority": "low", "remediation_details": "Check HTML content encoding."}
         })
 
     # 5. Execute Skill 4: On-Site Engagement & Orientation Audit
     try:
         from engagement_evaluator import run_engagement_audit
         engagement_findings = run_engagement_audit(target_url, raw_html=cached_html)
+        for f in engagement_findings:
+            f["area"] = "On-Site Engagement"
         all_findings.extend(engagement_findings)
     except Exception as e:
         all_findings.append({
             "title": "On-Site Engagement audit encountered execution exception",
             "severity": "low",
+            "area": "On-Site Engagement",
             "evidence": str(e),
-            "suggested_action": {"summary": "Verify engagement extractor and retry.", "priority": "low"}
+            "suggested_action": {"summary": "Verify engagement extractor and retry.", "priority": "low", "remediation_details": "Ensure DOM contains valid HTML elements."}
         })
 
     # 6. Harmonize cross-cutting findings and deduplicate
@@ -160,6 +172,7 @@ def run_full_audit(target_input, raw_html=None, raw_robots=None):
         harmonized_list.append({
             "title": "Missing <h1> headline (critical for both AI topic extraction and visitor orientation)",
             "severity": "high",
+            "area": "Cross-Cutting",
             "evidence": "Initial HTML response contains 0 <h1> elements. Both AI citation bots and arriving visitors lack a primary subject anchor to confirm topic match.",
             "suggested_action": {
                 "summary": "Add a prominent, server-rendered <h1> headline above the fold clearly defining the product and topic.",

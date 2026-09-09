@@ -1,8 +1,0 @@
-# 1. Run full end-to-end automated test suite
-python brand-ai-readiness-audit/test_runner.py
-
-# 2. Run a live audit on any URL via the orchestrator entrypoint
-python brand-ai-readiness-audit/skills/audit-orchestrator/scripts/orchestrate.py https://example.com
-
-# 3. Re-package and verify submission zip
-python brand-ai-readiness-audit/package_submission.py

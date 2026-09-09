@@ -284,7 +284,12 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
                 "evidence": f"Domain blocks foundation model indexing agents: {', '.join(blocked_training_bots)}.",
                 "suggested_action": {
                     "summary": "Review bot governance policy; allow AI search bots while selectively gating model training if desired.",
-                    "priority": "medium"
+                    "priority": "medium",
+                    "remediation_details": (
+                        "To permit foundation models to index your public content, update robots.txt:\n"
+                        f"User-agent: {blocked_training_bots[0]}\n"
+                        "Allow: /\n"
+                    )
                 }
             })
 
@@ -307,7 +312,8 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "evidence": f"GET {base_url}/robots.txt returned HTTP 404 Not Found.",
             "suggested_action": {
                 "summary": "Create a clear, permissive robots.txt declaring explicit bot allowances and sitemap path.",
-                "priority": "low"
+                "priority": "low",
+                "remediation_details": f"Create {base_url}/robots.txt:\nUser-agent: *\nAllow: /\nSitemap: {base_url}/sitemap.xml"
             }
         })
 
@@ -326,7 +332,11 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "evidence": f"Failed to retrieve HTML content from {target_url} (HTTP status: {code}).",
             "suggested_action": {
                 "summary": "Verify target server availability, firewall permissions, and SSL certificate validity.",
-                "priority": "critical"
+                "priority": "critical",
+                "remediation_details": (
+                    "Ensure the web server is operational and returns HTTP 200 to automated user agents:\n"
+                    f'curl -Iv -A "Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)" {target_url}'
+                )
             }
         })
         return findings
@@ -340,7 +350,12 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "evidence": f"Server sent header 'X-Robots-Tag: {x_robots}', which instructs crawlers not to index or quote text snippets.",
             "suggested_action": {
                 "summary": "Remove 'noindex' and 'nosnippet' directives from server HTTP response headers for public pages.",
-                "priority": "critical"
+                "priority": "critical",
+                "remediation_details": (
+                    "Update web server response header configuration to allow indexation and AI snippets:\n"
+                    "# Nginx example:\n"
+                    'add_header X-Robots-Tag "index, follow, max-snippet:-1";'
+                )
             }
         })
 
@@ -391,7 +406,8 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
                 "evidence": f"Found meta tag instructing crawlers not to index or snippet page content.",
                 "suggested_action": {
                     "summary": "Update meta robots tag to allow indexing and snippet generation: <meta name='robots' content='index, follow, max-snippet:-1'>.",
-                    "priority": "critical"
+                    "priority": "critical",
+                    "remediation_details": "Replace restrictive <meta> tag in <head> with:\n<meta name=\"robots\" content=\"index, follow, max-snippet:-1, max-image-preview:large\">"
                 }
             })
 
@@ -422,7 +438,11 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "evidence": f"Page payload is {html_length:,} bytes but contains only {text_length:,} characters of visible text ({text_ratio:.1f}% ratio).",
             "suggested_action": {
                 "summary": "Reduce inline script weight and defer non-critical JavaScript to improve raw HTML text density for AI extractors.",
-                "priority": "high"
+                "priority": "high",
+                "remediation_details": (
+                    "Extract inline script bundles to deferred external assets and pre-render factual text:\n"
+                    '<script src="/static/bundle.js" defer></script>'
+                )
             }
         })
 
@@ -434,7 +454,8 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "evidence": "Raw HTML contains 0 <h1> elements. AI extractors rely on <h1> to establish the primary subject of a document.",
             "suggested_action": {
                 "summary": "Include a single, descriptive <h1> element in the initial server-rendered HTML payload clearly identifying the page topic.",
-                "priority": "high"
+                "priority": "high",
+                "remediation_details": "Add a server-rendered <h1> in the main content container:\n<header>\n  <h1>Core Brand & Value Proposition</h1>\n</header>"
             }
         })
 

@@ -32,6 +32,7 @@ class ContentExtractor(HTMLParser):
         self.text_parts = []
         self.images = []
         self.headings = []
+        self.meta_tags = {}
         self.tables = 0
         self.lists = 0
         self._in_script_style = False
@@ -48,6 +49,12 @@ class ContentExtractor(HTMLParser):
             src = attr_dict.get("src", "")
             alt = attr_dict.get("alt", None)
             self.images.append({"src": src, "alt": alt})
+
+        if tag_lower == "meta":
+            prop = (attr_dict.get("property", "") or attr_dict.get("name", "")).lower().strip()
+            content = attr_dict.get("content", "").strip()
+            if prop and content:
+                self.meta_tags[prop] = content
 
         if tag_lower == "table":
             self.tables += 1
@@ -157,7 +164,8 @@ def run_quotability_audit(target_url, raw_html=None):
             "evidence": f"Found {len(missing_alt)} image(s) with completely empty or omitted alt attributes out of {total_images} total.",
             "suggested_action": {
                 "summary": "Add concise, informative alt text to all informational images describing what they illustrate.",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": 'Add descriptive alt text to images: <img src="/assets/diagram.png" alt="Architecture diagram showing real-time AI indexing and retrieval flow">'
             }
         })
 
@@ -195,21 +203,20 @@ def run_quotability_audit(target_url, raw_html=None):
     if not has_definition and total_words > 80:
         findings.append({
             "title": "Missing atomic entity definition statement in introductory section",
-            "severity": "medium",
-            "evidence": "Opening text lacks an explicit, self-contained definition sentence identifying what the brand is and its core category.",
+            "severity": "high",
+            "evidence": "Opening 150 words lack a definitive subject-predicate-object identity declaration (e.g. '[Brand] is an automated...').",
             "suggested_action": {
-                "summary": "Add a crisp, single-sentence definition in the opening section (e.g., '[Brand] is an enterprise platform for...').",
-                "priority": "medium",
-                "remediation_details": "RAG systems heavily prioritize opening declarative sentences when generating 'What is [Brand]?' answers."
+                "summary": "Add a crisp, one-sentence canonical definition of the brand/product in the hero paragraph.",
+                "priority": "high",
+                "remediation_details": "Structure the opening hero sentence as: '[Brand] is a [category] that [primary benefit] for [target audience].'"
             }
         })
 
-    # 4. Structured Q&A / FAQ Section for Direct Quotation
+    # 4. Heading Structure & Conversational FAQ Query Matching
     question_headings = [
         text for tag, text in extractor.headings
-        if "?" in text or text.lower().startswith(("how", "what", "why", "when", "can i", "is it"))
+        if any(text.lower().startswith(q) for q in ["how", "what", "why", "when", "where", "can", "is"]) or "?" in text
     ]
-
     if not question_headings and total_words > 300:
         findings.append({
             "title": "Lack of structured Q&A / FAQ format for conversational query matching",
@@ -217,11 +224,48 @@ def run_quotability_audit(target_url, raw_html=None):
             "evidence": "No question-format headings ('How...', 'What...', '?') found on the page. AI searchers frequently match conversational user queries directly to FAQ structures.",
             "suggested_action": {
                 "summary": "Include a dedicated FAQ section addressing common buyer and user queries in direct question-and-answer format.",
-                "priority": "medium"
+                "priority": "medium",
+                "remediation_details": "Add an FAQ section using natural language question headings (e.g. <h3>How does [Product] integrate with our stack?</h3><p>...</p>) to match conversational query patterns in AI search."
             }
         })
 
-    # 5. Check /llms.txt standard
+    # 5. Check OpenGraph / Social Citation Card Metadata
+    has_og_desc = "og:description" in extractor.meta_tags or "description" in extractor.meta_tags
+    has_og_title = "og:title" in extractor.meta_tags
+    has_og_image = "og:image" in extractor.meta_tags
+    if not has_og_desc or not has_og_title:
+        missing_parts = []
+        if not has_og_title:
+            missing_parts.append("og:title")
+        if not has_og_desc:
+            missing_parts.append("og:description")
+        findings.append({
+            "title": f"Missing OpenGraph ({', '.join(missing_parts)}) metadata for AI search citation cards",
+            "severity": "medium",
+            "evidence": f"Page lacks {', '.join(missing_parts)}. AI assistant search cards (ChatGPT Search, Perplexity) rely on OpenGraph tags to render rich preview snippets.",
+            "suggested_action": {
+                "summary": "Add OpenGraph meta tags in <head> for crisp, branded citation card previews in AI assistants.",
+                "priority": "medium",
+                "remediation_details": (
+                    '<meta property="og:title" content="Page Title - Brand Name">\n'
+                    '<meta property="og:description" content="Concise 1-2 sentence overview for AI citation snippets.">\n'
+                    '<meta property="og:image" content="https://example.com/social-preview.png">'
+                )
+            }
+        })
+    elif not has_og_image:
+        findings.append({
+            "title": "Missing 'og:image' OpenGraph tag for visual citation preview cards",
+            "severity": "low",
+            "evidence": "Page defines og:title and description but lacks 'og:image'. Visual thumbnail cards enhance click-through rates from AI referrals.",
+            "suggested_action": {
+                "summary": "Specify an og:image meta tag pointing to a high-resolution branded preview card.",
+                "priority": "low",
+                "remediation_details": '<meta property="og:image" content="https://example.com/assets/og-preview.png">'
+            }
+        })
+
+    # 6. Check /llms.txt standard
     parsed_url = urlparse(target_url)
     if parsed_url.scheme in ["http", "https"]:
         llms_url = urljoin(f"{parsed_url.scheme}://{parsed_url.netloc}", "/llms.txt")
@@ -234,7 +278,14 @@ def run_quotability_audit(target_url, raw_html=None):
                 "suggested_action": {
                     "summary": "Publish an /llms.txt file at domain root with curated markdown summaries and key technical links.",
                     "priority": "low",
-                    "remediation_details": "See https://llmstxt.org for specification guidelines."
+                    "remediation_details": (
+                        "Create https://example.com/llms.txt with core project context:\n"
+                        "# Project Name\n"
+                        "> Concise product summary for LLMs\n"
+                        "## Core Capabilities\n"
+                        "- Feature A: Details\n"
+                        "- Docs: https://example.com/docs"
+                    )
                 }
             })
 

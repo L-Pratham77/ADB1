@@ -313,6 +313,38 @@ Sitemap: https://acme.com/sitemap.xml
         self.assertIn("proactive_recommendations", report)
         self.assertGreater(len(report["proactive_recommendations"]), 0)
 
+        # Check AI readiness score and sub-scores
+        summary = report["summary"]
+        self.assertIn("ai_readiness_score", summary)
+        self.assertTrue(0 <= summary["ai_readiness_score"] <= 100)
+        self.assertIn("scores", summary)
+        self.assertIn("discoverability", summary["scores"])
+        self.assertIn("engagement", summary["scores"])
+        self.assertTrue(0 <= summary["scores"]["discoverability"] <= 100)
+        self.assertTrue(0 <= summary["scores"]["engagement"] <= 100)
+
+        # Check that all findings have copy-pasteable remediation_details
+        for f in report["findings"]:
+            action = f["suggested_action"]
+            self.assertIn("remediation_details", action, f"Finding {f['id']} lacks remediation_details")
+            self.assertTrue(len(action["remediation_details"].strip()) > 0)
+
+    def test_opengraph_citation_card_audit(self):
+        """Verifies detection of missing OpenGraph tags needed for AI search citation cards."""
+        html_without_og = """
+<!DOCTYPE html>
+<html>
+<head><title>No OG Tags</title></head>
+<body><h1>Hello World</h1></body>
+</html>
+"""
+        findings = run_quotability_audit("https://example.com", raw_html=html_without_og)
+        og_findings = [f for f in findings if "OpenGraph" in f["title"]]
+        self.assertEqual(len(og_findings), 1)
+        self.assertIn("remediation_details", og_findings[0]["suggested_action"])
+        self.assertIn("og:title", og_findings[0]["suggested_action"]["remediation_details"])
+        self.assertIn("og:description", og_findings[0]["suggested_action"]["remediation_details"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

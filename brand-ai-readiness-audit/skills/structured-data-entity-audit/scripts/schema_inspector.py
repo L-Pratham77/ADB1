@@ -111,7 +111,18 @@ def run_schema_audit(target_url, raw_html=None):
                 "evidence": f"Failed to parse JSON-LD block #{block_num}: {err}.",
                 "suggested_action": {
                     "summary": "Fix JSON syntax errors (e.g. unescaped quotes, trailing commas) so AI crawlers can parse schema triples.",
-                    "priority": "high"
+                    "priority": "high",
+                    "remediation_details": (
+                        "Validate and correct JSON-LD syntax in <head>:\n"
+                        '<script type="application/ld+json">\n'
+                        '{\n'
+                        '  "@context": "https://schema.org",\n'
+                        '  "@type": "Organization",\n'
+                        '  "name": "Brand Name",\n'
+                        '  "url": "https://example.com"\n'
+                        '}\n'
+                        '</script>'
+                    )
                 }
             })
 
@@ -151,7 +162,8 @@ def run_schema_audit(target_url, raw_html=None):
             "evidence": f"Structured data contains schemas: {list(schema_types)}, but lacks an Organization or Corporation entity definition.",
             "suggested_action": {
                 "summary": "Add Schema.org Organization markup with legal name, official logo, founding date, and sameAs links.",
-                "priority": "high"
+                "priority": "high",
+                "remediation_details": 'Add Organization JSON-LD to <head>: <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "Brand Name", "url": "https://example.com", "logo": "https://example.com/logo.png"}</script>'
             }
         })
     else:
@@ -188,7 +200,8 @@ def run_schema_audit(target_url, raw_html=None):
                 "evidence": f"Discovered sameAs links: {all_same_as[:3]}, but none point to Wikidata, Wikipedia, Crunchbase, or LinkedIn.",
                 "suggested_action": {
                     "summary": "Corroborate brand identity by linking to your Wikidata QID or Crunchbase profile.",
-                    "priority": "low"
+                    "priority": "low",
+                    "remediation_details": 'Ground brand identity in external knowledge graphs: add Wikidata URL (e.g. "https://www.wikidata.org/wiki/Q...") to the "sameAs" array.'
                 }
             })
 
@@ -217,7 +230,8 @@ def run_schema_audit(target_url, raw_html=None):
             "evidence": "No BreadcrumbList schema found. Limits AI understanding of site hierarchy and parent category relationships.",
             "suggested_action": {
                 "summary": "Implement BreadcrumbList JSON-LD to explicitly communicate site navigation taxonomy.",
-                "priority": "low"
+                "priority": "low",
+                "remediation_details": 'Add BreadcrumbList JSON-LD: <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://example.com"}]}</script>'
             }
         })
 
