@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BrandAIReadinessAuditReport",
+  "description": "Standardized schema for Brand AI Discoverability and On-Site Engagement audit reports.",
+  "type": "object",
+  "required": ["site", "audited_at", "summary", "findings"],
+  "properties": {
+    "site": {
+      "type": "string",
+      "description": "Target domain or URL audited."
+    },
+    "audited_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the audit was performed."
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_findings", "critical", "high", "medium"],
+      "properties": {
+        "total_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "severity", "evidence", "suggested_action"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F-\\d{3,}$",
+            "description": "Unique finding identifier (e.g. F-001)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Concise summary of the detected defect."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "Impact severity of the finding."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Empirical evidence, counts, or code snippets backing the finding."
+          },
+          "suggested_action": {
+            "type": "object",
+            "required": ["summary", "priority"],
+            "properties": {
+              "summary": {
+                "type": "string",
+                "description": "Mechanism-sound recommendation for resolving the issue."
+              },
+              "priority": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low"]
+              },
+              "remediation_details": {
+                "type": "string"
+              },
+              "code_example": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "proactive_recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["area", "title", "impact", "action"],
+        "properties": {
+          "area": { "type": "string" },
+          "title": { "type": "string" },
+          "impact": { "type": "string" },
+          "action": { "type": "string" }
+        }
+      }
+    }
+  }
+}
