@@ -34,39 +34,55 @@ class ContentExtractor(HTMLParser):
         self.headings = []
         self.tables = 0
         self.lists = 0
-        self._current_tag = None
         self._in_script_style = False
+        self._tag_stack = []
 
     def handle_starttag(self, tag, attrs):
-        self._current_tag = tag.lower()
+        tag_lower = tag.lower()
         attr_dict = {k.lower(): (v or "") for k, v in attrs}
 
-        if self._current_tag in ["script", "style"]:
+        if tag_lower in ["script", "style"]:
             self._in_script_style = True
 
-        if self._current_tag == "img":
+        if tag_lower == "img":
             src = attr_dict.get("src", "")
             alt = attr_dict.get("alt", None)
             self.images.append({"src": src, "alt": alt})
 
-        if self._current_tag == "table":
+        if tag_lower == "table":
             self.tables += 1
 
-        if self._current_tag in ["ul", "ol"]:
+        if tag_lower in ["ul", "ol"]:
             self.lists += 1
 
+        self._tag_stack.append({
+            "tag": tag_lower,
+            "text_parts": []
+        })
+
     def handle_endtag(self, tag):
-        if tag.lower() in ["script", "style"]:
+        tag_lower = tag.lower()
+        if tag_lower in ["script", "style"]:
             self._in_script_style = False
-        self._current_tag = None
+
+        matched = None
+        for i in range(len(self._tag_stack) - 1, -1, -1):
+            if self._tag_stack[i]["tag"] == tag_lower:
+                matched = self._tag_stack.pop(i)
+                break
+
+        if matched and tag_lower in ["h1", "h2", "h3"]:
+            full_heading = " ".join("".join(matched["text_parts"]).split())
+            if full_heading:
+                self.headings.append((tag_lower, full_heading))
 
     def handle_data(self, data):
-        if not self._in_script_style:
+        if not self._in_script_style and data:
             clean = data.strip()
             if clean:
                 self.text_parts.append(clean)
-                if self._current_tag in ["h1", "h2", "h3"]:
-                    self.headings.append((self._current_tag, clean))
+            for entry in self._tag_stack:
+                entry["text_parts"].append(data)
 
 
 def fetch_resource(url, timeout=5):
@@ -149,6 +165,9 @@ def run_quotability_audit(target_url, raw_html=None):
     if total_words > 100:
         lower_words = [w.lower() for w in words]
         buzzword_count = sum(1 for w in lower_words if w in BUZZWORDS)
+        lower_full_text = full_text.lower()
+        for phrase in ["cutting edge", "game changer", "paradigm shift", "next gen", "world class"]:
+            buzzword_count += lower_full_text.count(phrase)
         buzzword_pct = (buzzword_count / total_words) * 100
 
         if buzzword_pct > 2.0:

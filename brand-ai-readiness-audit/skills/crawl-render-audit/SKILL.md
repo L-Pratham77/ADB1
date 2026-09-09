@@ -2,6 +2,7 @@
 name: crawl-render-audit
 description: Audit a website's technical crawlability, robots.txt directives for AI search bots (ChatGPT-User, OAI-SearchBot, Claude-Web, PerplexityBot), HTTP indexation headers, sitemaps, and client-side JavaScript rendering hydration gaps. Use when diagnosing why AI assistants cannot discover, fetch, or render a domain's pages.
 license: Apache-2.0
+allowed-tools: [python, bash]
 metadata:
   version: "1.0.0"
   category: "ai-discoverability"

@@ -32,55 +32,70 @@ class EngagementExtractor(HTMLParser):
         self.has_nav = False
         self.has_breadcrumbs = False
         self.has_modal_markup = False
-        self._current_tag = None
         self._in_script_style = False
-        self._current_text = []
+        self._tag_stack = []
 
     def handle_starttag(self, tag, attrs):
-        self._current_tag = tag.lower()
+        tag_lower = tag.lower()
         attr_dict = {k.lower(): (v or "") for k, v in attrs}
 
-        if self._current_tag in ["script", "style"]:
+        if tag_lower in ["script", "style"]:
             self._in_script_style = True
 
-        if self._current_tag == "nav":
+        if tag_lower == "nav":
             self.has_nav = True
 
         classes_and_ids = f"{attr_dict.get('class', '')} {attr_dict.get('id', '')}".lower()
-        if "breadcrumb" in classes_and_ids or attr_dict.get("aria-label", "").lower() == "breadcrumb":
+        if "breadcrumb" in classes_and_ids or attr_dict.get("aria-label", "").lower() in ["breadcrumb", "breadcrumbs"]:
             self.has_breadcrumbs = True
 
         if any(term in classes_and_ids for term in ["modal-popup", "newsletter-overlay", "popup-wrapper", "exit-intent"]):
             self.has_modal_markup = True
 
-        self._current_attrs = attr_dict
-        self._current_text = []
+        self._tag_stack.append({
+            "tag": tag_lower,
+            "attrs": attr_dict,
+            "text_parts": []
+        })
 
     def handle_endtag(self, tag):
         tag_lower = tag.lower()
         if tag_lower in ["script", "style"]:
             self._in_script_style = False
 
-        text_content = "".join(self._current_text).strip()
+        matched_entry = None
+        for i in range(len(self._tag_stack) - 1, -1, -1):
+            if self._tag_stack[i]["tag"] == tag_lower:
+                matched_entry = self._tag_stack.pop(i)
+                break
 
-        if tag_lower in ["h1", "h2", "h3", "h4", "h5", "h6"]:
-            self.headings.append((tag_lower, text_content))
-        elif tag_lower == "p" and text_content:
-            self.paragraphs.append(text_content)
-        elif tag_lower == "button" and text_content:
-            self.buttons.append(text_content)
-        elif tag_lower == "a" and text_content:
-            classes = self._current_attrs.get("class", "").lower()
-            if any(btn_cls in classes for btn_cls in ["btn", "button", "cta"]):
-                self.buttons.append(text_content)
-            else:
-                self.links.append(text_content)
+        if matched_entry:
+            text_content = " ".join("".join(matched_entry["text_parts"]).split())
+            attr_dict = matched_entry["attrs"]
 
-        self._current_tag = None
+            if tag_lower in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+                if text_content:
+                    self.headings.append((tag_lower, text_content))
+            elif tag_lower == "p":
+                if text_content:
+                    self.paragraphs.append(text_content)
+            elif tag_lower == "button":
+                if text_content:
+                    self.buttons.append(text_content)
+            elif tag_lower == "a":
+                classes = attr_dict.get("class", "").lower()
+                role = attr_dict.get("role", "").lower()
+                is_button_styled = role == "button" or any(btn_cls in classes for btn_cls in ["btn", "button", "cta"])
+                if text_content:
+                    if is_button_styled:
+                        self.buttons.append(text_content)
+                    else:
+                        self.links.append(text_content)
 
     def handle_data(self, data):
-        if not self._in_script_style:
-            self._current_text.append(data)
+        if not self._in_script_style and data:
+            for entry in self._tag_stack:
+                entry["text_parts"].append(data)
 
 
 def fetch_page(url, timeout=5):

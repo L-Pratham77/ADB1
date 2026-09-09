@@ -2,6 +2,7 @@
 name: structured-data-entity-audit
 description: Audit website structured data, Schema.org JSON-LD and Microdata implementations, entity disambiguation, and knowledge graph corroboration. Use when diagnosing why AI assistants cannot extract structured product attributes, pricing, or brand knowledge triples.
 license: Apache-2.0
+allowed-tools: [python, bash]
 metadata:
   version: "1.0.0"
   category: "ai-discoverability"

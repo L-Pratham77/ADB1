@@ -1,0 +1,112 @@
+{
+  "site": "109pratham77.tech",
+  "audited_at": "2026-09-09T22:39:44Z",
+  "summary": {
+    "total_findings": 7,
+    "critical": 0,
+    "high": 1,
+    "medium": 4,
+    "low": 2
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "Missing Organization Schema for brand identity and authority",
+      "severity": "high",
+      "evidence": "Structured data contains schemas: ['Person'], but lacks an Organization or Corporation entity definition.",
+      "suggested_action": {
+        "summary": "Add Schema.org Organization markup with legal name, official logo, founding date, and sameAs links.",
+        "priority": "high"
+      }
+    },
+    {
+      "id": "F-002",
+      "title": "AI training crawlers restricted in robots.txt (GPTBot, ClaudeBot, Google-Extended, CCBot)",
+      "severity": "medium",
+      "evidence": "Domain blocks foundation model indexing agents: GPTBot, ClaudeBot, Google-Extended, CCBot.",
+      "suggested_action": {
+        "summary": "Review bot governance policy; allow AI search bots while selectively gating model training if desired.",
+        "priority": "medium"
+      }
+    },
+    {
+      "id": "F-003",
+      "title": "Missing XML Sitemap declaration in robots.txt",
+      "severity": "medium",
+      "evidence": "No 'Sitemap: https://...' directive discovered in robots.txt.",
+      "suggested_action": {
+        "summary": "Declare canonical XML sitemap location at the bottom of robots.txt.",
+        "priority": "medium",
+        "remediation_details": "Add `Sitemap: https://109pratham77.tech/sitemap.xml` to robots.txt."
+      }
+    },
+    {
+      "id": "F-004",
+      "title": "Missing atomic entity definition statement in introductory section",
+      "severity": "medium",
+      "evidence": "Opening text lacks an explicit, self-contained definition sentence identifying what the brand is and its core category.",
+      "suggested_action": {
+        "summary": "Add a crisp, single-sentence definition in the opening section (e.g., '[Brand] is an enterprise platform for...').",
+        "priority": "medium",
+        "remediation_details": "RAG systems heavily prioritize opening declarative sentences when generating 'What is [Brand]?' answers."
+      }
+    },
+    {
+      "id": "F-005",
+      "title": "Lack of structured Q&A / FAQ format for conversational query matching",
+      "severity": "medium",
+      "evidence": "No question-format headings ('How...', 'What...', '?') found on the page. AI searchers frequently match conversational user queries directly to FAQ structures.",
+      "suggested_action": {
+        "summary": "Include a dedicated FAQ section addressing common buyer and user queries in direct question-and-answer format.",
+        "priority": "medium"
+      }
+    },
+    {
+      "id": "F-006",
+      "title": "Missing BreadcrumbList Schema for topical hierarchy",
+      "severity": "low",
+      "evidence": "No BreadcrumbList schema found. Limits AI understanding of site hierarchy and parent category relationships.",
+      "suggested_action": {
+        "summary": "Implement BreadcrumbList JSON-LD to explicitly communicate site navigation taxonomy.",
+        "priority": "low"
+      }
+    },
+    {
+      "id": "F-007",
+      "title": "No /llms.txt file found for direct AI assistant ingestion",
+      "severity": "low",
+      "evidence": "GET https://109pratham77.tech/llms.txt returned HTTP 0. Site does not yet offer a curated markdown index for AI crawlers.",
+      "suggested_action": {
+        "summary": "Publish an /llms.txt file at domain root with curated markdown summaries and key technical links.",
+        "priority": "low",
+        "remediation_details": "See https://llmstxt.org for specification guidelines."
+      }
+    }
+  ],
+  "proactive_recommendations": [
+    {
+      "area": "AI Discoverability",
+      "title": "Publish Curated /llms.txt Machine Index",
+      "impact": "Enables emerging AI agents (ChatGPT Search, Perplexity, Claude) to ingest documentation and product specs without parsing complex HTML/CSS layouts.",
+      "action": "Create https://109pratham77.tech/llms.txt containing structured markdown summaries of products, pricing, and API endpoints."
+    },
+    {
+      "area": "AI Discoverability",
+      "title": "Canonical Wikidata & Knowledge Graph Grounding",
+      "impact": "Eliminates entity ambiguity across foundation models and establishes permanent corporate entity authority in Google Knowledge Graph and Microsoft Satori.",
+      "action": "Link your organization's official Wikidata item (QID) and Wikipedia entry in the 'sameAs' array of Schema.org Organization JSON-LD."
+    },
+    {
+      "area": "On-Site Engagement",
+      "title": "Context-Preserving Landing Experience for AI Referrals",
+      "impact": "Prevents immediate bounce for users arriving from AI assistant search citations by greeting them with modular, scannable proof points.",
+      "action": "Ensure key feature and pricing pages display clear breadcrumbs and a 3-second value proposition directly confirming the topic highlighted in AI citations."
+    },
+    {
+      "area": "AI Discoverability",
+      "title": "Proactive FAQ Schema for High-Intent Conversational Queries",
+      "impact": "Directly feeds question-and-answer pairs into AI search engines, securing featured snippets and conversational citation cards.",
+      "action": "Deploy Schema.org FAQPage structured data on key product pages answering top customer queries (pricing, integrations, enterprise security)."
+    }
+  ]
+}

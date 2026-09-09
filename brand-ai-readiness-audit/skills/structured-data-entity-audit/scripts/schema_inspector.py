@@ -71,10 +71,8 @@ def flatten_json_ld(obj):
         for item in obj:
             yield from flatten_json_ld(item)
     elif isinstance(obj, dict):
-        if "@graph" in obj:
-            yield from flatten_json_ld(obj["@graph"])
         yield obj
-        for v in obj.values():
+        for k, v in obj.items():
             if isinstance(v, (dict, list)):
                 yield from flatten_json_ld(v)
 
@@ -195,7 +193,7 @@ def run_schema_audit(target_url, raw_html=None):
             })
 
     # 4. Check Product / Offer schema if commercial signals exist
-    pricing_pattern = re.compile(r'(\$\s*\d+|\b(pricing|subscription|plans|buy\s+now|billed\s+annually)\b)', re.IGNORECASE)
+    pricing_pattern = re.compile(r'((\$|€|£|¥|₹|\bUSD\b|\bEUR\b|\bGBP\b|\bINR\b)\s*\d+|\b(pricing|subscription|plans|buy\s+now|billed\s+annually)\b)', re.IGNORECASE)
     has_pricing_signals = bool(pricing_pattern.search(html))
     has_product_schema = any(t in ["Product", "Offer", "SoftwareApplication", "Service"] for t in schema_types)
 

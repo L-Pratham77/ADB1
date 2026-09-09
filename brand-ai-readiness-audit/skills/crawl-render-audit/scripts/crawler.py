@@ -42,20 +42,35 @@ class BasicHTMLTextExtractor(HTMLParser):
         self.has_app_container = False
         self._current_tag = None
         self._in_script_style = False
+        self._in_h1 = 0
+        self._h1_buffer = []
+        self._in_h2 = 0
+        self._h2_buffer = []
         self._in_container = False
+        self._container_depth = 0
         self._container_text_len = 0
 
     def handle_starttag(self, tag, attrs):
-        self._current_tag = tag.lower()
+        tag_lower = tag.lower()
+        self._current_tag = tag_lower
         attr_dict = {k.lower(): (v or "") for k, v in attrs}
 
-        if self._current_tag in ["script", "style"]:
+        if tag_lower in ["script", "style"]:
             self._in_script_style = True
 
-        if self._current_tag == "noscript":
+        if tag_lower == "noscript":
             self.noscript_found = True
 
-        if self._current_tag == "meta":
+        if tag_lower == "h1":
+            self._in_h1 += 1
+            if self._in_h1 == 1:
+                self._h1_buffer = []
+        elif tag_lower == "h2":
+            self._in_h2 += 1
+            if self._in_h2 == 1:
+                self._h2_buffer = []
+
+        if tag_lower == "meta":
             name = attr_dict.get("name", "").lower()
             content = attr_dict.get("content", "").lower()
             if name in ["robots", "googlebot", "bingbot", "gptbot"]:
@@ -65,16 +80,37 @@ class BasicHTMLTextExtractor(HTMLParser):
         if div_id in ["root", "app", "__next", "__nuxt", "main-app"]:
             self.has_app_container = True
             self._in_container = True
+            self._container_depth = 1
             self._container_text_len = 0
+        elif self._in_container and tag_lower == "div":
+            self._container_depth += 1
 
     def handle_endtag(self, tag):
         tag_lower = tag.lower()
         if tag_lower in ["script", "style"]:
             self._in_script_style = False
+
+        if tag_lower == "h1":
+            self._in_h1 = max(0, self._in_h1 - 1)
+            if self._in_h1 == 0:
+                full_h1 = " ".join("".join(self._h1_buffer).split())
+                if full_h1:
+                    self.h1_tags.append(full_h1)
+        elif tag_lower == "h2":
+            self._in_h2 = max(0, self._in_h2 - 1)
+            if self._in_h2 == 0:
+                full_h2 = " ".join("".join(self._h2_buffer).split())
+                if full_h2:
+                    self.h2_tags.append(full_h2)
+
         if tag_lower == "div" and self._in_container:
-            if self._container_text_len < 30:
-                self.root_div_empty = True
-            self._in_container = False
+            self._container_depth -= 1
+            if self._container_depth <= 0:
+                if self._container_text_len < 30:
+                    self.root_div_empty = True
+                self._in_container = False
+                self._container_depth = 0
+
         self._current_tag = None
 
     def handle_data(self, data):
@@ -82,12 +118,12 @@ class BasicHTMLTextExtractor(HTMLParser):
             clean = data.strip()
             if clean:
                 self.text_parts.append(clean)
-                if self._current_tag == "h1":
-                    self.h1_tags.append(clean)
-                elif self._current_tag == "h2":
-                    self.h2_tags.append(clean)
-                if self._in_container:
-                    self._container_text_len += len(clean)
+            if self._in_h1 > 0:
+                self._h1_buffer.append(data)
+            if self._in_h2 > 0:
+                self._h2_buffer.append(data)
+            if self._in_container:
+                self._container_text_len += len(clean)
 
 
 def fetch_url(url, timeout=7):
@@ -124,10 +160,12 @@ def fetch_url(url, timeout=7):
 def parse_robots_txt(robots_content):
     """
     Parses robots.txt and checks access rules for general crawlers and specific AI bots.
+    Adheres to RFC 9309 group boundaries and case-insensitive user-agent matching.
     Returns: { bot_name: {"disallow_all": bool, "disallowed_paths": list, "allowed": bool} }
     """
     rules = {}
     current_agents = []
+    last_was_directive = False
     sitemaps = []
 
     for line in robots_content.splitlines():
@@ -141,18 +179,21 @@ def parse_robots_txt(robots_content):
             val = val.strip()
 
             if field == "user-agent":
-                agent = val.strip()
-                current_agents.append(agent)
-            elif field == "disallow":
+                if last_was_directive:
+                    current_agents = []
+                    last_was_directive = False
+                agent_norm = val.lower()
+                if agent_norm:
+                    current_agents.append(agent_norm)
+            elif field in ["disallow", "allow"]:
+                last_was_directive = True
                 for agent in current_agents:
                     if agent not in rules:
                         rules[agent] = {"disallows": [], "allows": []}
-                    rules[agent]["disallows"].append(val)
-            elif field == "allow":
-                for agent in current_agents:
-                    if agent not in rules:
-                        rules[agent] = {"disallows": [], "allows": []}
-                    rules[agent]["allows"].append(val)
+                    if field == "disallow":
+                        rules[agent]["disallows"].append(val)
+                    else:
+                        rules[agent]["allows"].append(val)
             elif field == "sitemap":
                 sitemaps.append(val)
 
@@ -162,21 +203,24 @@ def parse_robots_txt(robots_content):
     }
 
     star_rules = rules.get("*", {"disallows": [], "allows": []})
-    star_blocks_all = "/" in star_rules["disallows"]
+    star_blocks_all = any(d in ["/", "/*"] for d in star_rules["disallows"])
+    if star_blocks_all and any(a in ["/", "/*"] for a in star_rules["allows"]):
+        star_blocks_all = False
 
     for bot in AI_BOTS:
-        bot_rule = rules.get(bot)
+        bot_norm = bot.lower()
+        bot_rule = rules.get(bot_norm)
         if bot_rule:
-            disallowed_all = "/" in bot_rule["disallows"]
+            disallowed_all = any(d in ["/", "/*"] for d in bot_rule["disallows"])
+            if disallowed_all and any(a in ["/", "/*"] for a in bot_rule["allows"]):
+                disallowed_all = False
             disallowed_paths = bot_rule["disallows"]
-            allowed = not disallowed_all
         else:
             disallowed_all = star_blocks_all
             disallowed_paths = star_rules["disallows"]
-            allowed = not star_blocks_all
 
         analysis["bot_status"][bot] = {
-            "explicit": bot in rules,
+            "explicit": bot_norm in rules,
             "disallowed_all": disallowed_all,
             "disallowed_paths": disallowed_paths,
             "can_access_root": not disallowed_all
@@ -297,6 +341,37 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             "suggested_action": {
                 "summary": "Remove 'noindex' and 'nosnippet' directives from server HTTP response headers for public pages.",
                 "priority": "critical"
+            }
+        })
+
+    # Check for WAF / Anti-Bot Interstitials and CAPTCHAs
+    html_lower = html.lower()
+    waf_signals = []
+    if "awswaf" in html_lower or "gokuprops" in html_lower or "aws-waf" in html_lower:
+        waf_signals.append("AWS WAF client-side challenge ('awsWafCookie')")
+    if "bm-verify" in html_lower or "ak_bmsc" in html_lower:
+        waf_signals.append("Akamai Bot Manager interstitial ('bm-verify')")
+    if "cf-chl-" in html_lower or "cloudflare-challenge" in html_lower or "challenge-platform" in html_lower or "just a moment..." in html_lower:
+        waf_signals.append("Cloudflare Managed Challenge")
+    if "datadome" in html_lower:
+        waf_signals.append("DataDome bot protection")
+    if "perimeterx" in html_lower or "px-captcha" in html_lower:
+        waf_signals.append("PerimeterX / HUMAN bot challenge")
+    if ("captcha" in html_lower or "robot check" in html_lower) and len(html) < 4000:
+        waf_signals.append("Automated CAPTCHA / Bot Barrier")
+
+    if waf_signals:
+        findings.append({
+            "title": f"Automated bot challenge or WAF interception detected ({waf_signals[0]})",
+            "severity": "critical",
+            "evidence": (
+                f"Initial HTTP response payload is intercepted by a security WAF challenge: {', '.join(waf_signals)}. "
+                "AI search assistants and retrieval crawlers cannot solve JavaScript interstitials and will drop citations."
+            ),
+            "suggested_action": {
+                "summary": "Configure WAF allowlists or bot management bypass rules for verified AI assistant crawlers (e.g. OpenAI, Anthropic, Perplexity).",
+                "priority": "critical",
+                "remediation_details": "Whitelist verified AI bot IP ranges or user-agents in your CDN / WAF to prevent false blocks."
             }
         })
 

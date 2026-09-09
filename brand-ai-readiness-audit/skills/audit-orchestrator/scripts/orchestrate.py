@@ -151,10 +151,32 @@ def run_full_audit(target_input, raw_html=None, raw_robots=None):
             "suggested_action": {"summary": "Verify engagement extractor and retry.", "priority": "low"}
         })
 
-    # 6. Deduplicate and harmonize findings
+    # 6. Harmonize cross-cutting findings and deduplicate
+    has_crawl_h1 = any("Missing semantic <h1> heading in initial HTML response" in f.get("title", "") for f in all_findings)
+    has_engagement_h1 = any("Missing above-the-fold <h1> headline for immediate visitor orientation" in f.get("title", "") for f in all_findings)
+
+    harmonized_list = []
+    if has_crawl_h1 and has_engagement_h1:
+        harmonized_list.append({
+            "title": "Missing <h1> headline (critical for both AI topic extraction and visitor orientation)",
+            "severity": "high",
+            "evidence": "Initial HTML response contains 0 <h1> elements. Both AI citation bots and arriving visitors lack a primary subject anchor to confirm topic match.",
+            "suggested_action": {
+                "summary": "Add a prominent, server-rendered <h1> headline above the fold clearly defining the product and topic.",
+                "priority": "high",
+                "remediation_details": "Include a single descriptive <h1> (6–12 words) in the initial server HTML payload."
+            }
+        })
+        for f in all_findings:
+            if "Missing semantic <h1> heading in initial HTML response" not in f.get("title", "") and \
+               "Missing above-the-fold <h1> headline for immediate visitor orientation" not in f.get("title", ""):
+                harmonized_list.append(f)
+    else:
+        harmonized_list = all_findings
+
     seen_titles = set()
     deduped_findings = []
-    for f in all_findings:
+    for f in harmonized_list:
         title_key = f.get("title", "").strip().lower()
         if title_key not in seen_titles:
             seen_titles.add(title_key)

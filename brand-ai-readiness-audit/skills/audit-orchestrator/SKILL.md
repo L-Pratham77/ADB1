@@ -2,6 +2,7 @@
 name: audit-orchestrator
 description: Master entrypoint skill for Brand AI-Readiness and On-Site Engagement audits. Coordinates specialized domain skills (crawl-render, structured data, content quotability, on-site engagement), aggregates empirical evidence, normalizes severity ratings, prioritizes corrective actions, and emits the standardized JSON audit report.
 license: Apache-2.0
+allowed-tools: [python, bash]
 metadata:
   version: "1.0.0"
   category: "orchestration"

@@ -2,6 +2,7 @@
 name: on-site-engagement-audit
 description: Audit on-site visitor orientation, 3-second value proposition clarity, heading hierarchy, Call-to-Action (CTA) effectiveness, cognitive load, and navigation aids. Use when diagnosing why visitors arriving from AI search citations bounce or fail to engage.
 license: Apache-2.0
+allowed-tools: [python, bash]
 metadata:
   version: "1.0.0"
   category: "on-site-engagement"

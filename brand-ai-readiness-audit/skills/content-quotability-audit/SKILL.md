@@ -2,6 +2,7 @@
 name: content-quotability-audit
 description: Audit web content for AI assistant retrieval (RAG) quotability, signal-to-noise ratio, marketing buzzword bloat, facts trapped in raster images, opening definition clarity, and /llms.txt support. Use when diagnosing why an AI assistant drops or fails to quote facts from a website.
 license: Apache-2.0
+allowed-tools: [python, bash]
 metadata:
   version: "1.0.0"
   category: "ai-discoverability"

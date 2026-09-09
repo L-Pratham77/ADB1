@@ -173,6 +173,91 @@ Disallow: /
         self.assertEqual(len(h1_missing), 1)
         self.assertEqual(len(cta_missing), 1)
 
+    def test_robots_txt_group_isolation_and_case_insensitivity(self):
+        """Verifies RFC 9309 group boundaries and case-insensitive user-agent matching."""
+        mock_robots = """
+User-agent: *
+Disallow: /admin/
+
+User-agent: chatgpt-user
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+"""
+        findings = run_crawl_audit("https://testbrand.com", raw_html="<html><body><h1>Test</h1></body></html>", raw_robots=mock_robots)
+        blocked_findings = [f for f in findings if "AI search and citation bots explicitly blocked" in f["title"]]
+        self.assertEqual(len(blocked_findings), 1)
+        # Verify that only the explicitly blocked bots are listed, and other bots (like Claude-Web) are NOT blocked
+        evidence = blocked_findings[0]["evidence"]
+        self.assertIn("ChatGPT-User", evidence)
+        self.assertIn("PerplexityBot", evidence)
+        self.assertNotIn("Claude-Web", evidence)
+
+    def test_nested_tags_in_headings_and_buttons(self):
+        """Verifies that nested tags (span, b, i) inside h1 and buttons preserve complete text and classes."""
+        mock_html = """
+<!DOCTYPE html>
+<html>
+<head><title>Modern Styled App</title></head>
+<body>
+  <nav><a href="/">Home</a></nav>
+  <h1 class="hero">Transform Your <span>Intelligent Enterprise</span></h1>
+  <a class="btn btn-primary" href="/signup"><span>Get Started Free</span></a>
+</body>
+</html>
+"""
+        engagement_findings = run_engagement_audit("https://testbrand.com", raw_html=mock_html)
+        # Should NOT flag missing H1 or missing CTA
+        missing_h1 = [f for f in engagement_findings if "<h1>" in f["title"]]
+        missing_cta = [f for f in engagement_findings if "Call-to-Action" in f["title"]]
+        self.assertEqual(len(missing_h1), 0, f"Unexpected H1 finding: {missing_h1}")
+        self.assertEqual(len(missing_cta), 0, f"Unexpected CTA finding: {missing_cta}")
+
+        # Crawl audit should also capture H1 with child span
+        crawl_findings = run_crawl_audit("https://testbrand.com", raw_html=mock_html, raw_robots="User-agent: *\nAllow: /")
+        missing_crawl_h1 = [f for f in crawl_findings if "Missing semantic <h1>" in f["title"]]
+        self.assertEqual(len(missing_crawl_h1), 0)
+
+    def test_international_currency_pricing_detection(self):
+        """Verifies detection of commercial pricing signals using international currency symbols (€, £, ¥, ₹)."""
+        mock_html = """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Global SaaS</title>
+  <script type="application/ld+json">
+  {"@context": "https://schema.org", "@type": "Organization", "name": "Global SaaS", "sameAs": ["https://www.wikidata.org/wiki/Q1"]}
+  </script>
+</head>
+<body>
+  <h1>Global Solutions</h1>
+  <p>Our European tier is €49/mo and UK tier is £39/mo.</p>
+</body>
+</html>
+"""
+        findings = run_schema_audit("https://testbrand.com", raw_html=mock_html)
+        pricing_findings = [f for f in findings if "Commercial or pricing content present" in f["title"]]
+        self.assertEqual(len(pricing_findings), 1)
+
+    def test_cross_skill_h1_harmonization(self):
+        """Verifies entrypoint harmonizes overlapping missing-H1 findings from crawl and engagement skills."""
+        mock_html = """
+<!DOCTYPE html>
+<html>
+<head><title>No H1 Site</title></head>
+<body>
+  <nav><a href="/">Home</a></nav>
+  <p>Welcome to our page without any headline.</p>
+  <button class="btn">Click to Explore</button>
+</body>
+</html>
+"""
+        report = run_full_audit("https://testbrand.com", raw_html=mock_html, raw_robots="User-agent: *\nAllow: /")
+        h1_findings = [f for f in report["findings"] if "Missing <h1> headline" in f["title"]]
+        self.assertEqual(len(h1_findings), 1, "Expected exactly 1 harmonized H1 finding")
+        self.assertIn("critical for both AI topic extraction and visitor orientation", h1_findings[0]["title"])
+
 
 class TestEndToEndOrchestrationAndReportSchema(unittest.TestCase):
     """Tests the full orchestration pipeline and validates the generated report against the required schema."""
