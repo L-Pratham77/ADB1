@@ -2,7 +2,7 @@
 > **Adobe University Hackathon 2026 — Round 3**  
 > An automated, multi-skill evaluation engine for assessing and remediating website **AI Discoverability** and **On-Site Engagement**.
 
-[![Tests](https://img.shields.io/badge/tests-13%20passed-brightgreen)](#automated-test-suite)
+[![Tests](https://img.shields.io/badge/tests-17%20passed-brightgreen)](#automated-test-suite)
 [![Platform](https://img.shields.io/badge/agentskills.io-compliant-blue)](#marketplace-architecture)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](#prerequisites)
 [![Dependencies](https://img.shields.io/badge/dependencies-zero%20(stdlib)-brightgreen)](#prerequisites)
@@ -29,7 +29,7 @@ python run_audit.py https://example.com --format markdown
 
 ## Running Automated Tests
 
-Run the full 13-test regression and compliance suite:
+Run the full 17-test regression and compliance suite:
 
 ```bash
 python brand-ai-readiness-audit/test_runner.py
@@ -55,7 +55,7 @@ brand-ai-readiness-audit/
 ├── README.md                                # Root documentation & composition guide
 ├── HOW_TO_RUN.txt                           # Running instructions & quick-start guide
 ├── run_audit.py                             # Single 1-command execution launcher
-├── test_runner.py                           # Automated test suite (13 unit & integration tests)
+├── _runner.py                           # Automated  suite (13 unit & integration s)
 ├── package_submission.py                    # Submission packaging and verification utility
 └── skills/
     ├── audit-orchestrator/                  # [ENTRYPOINT] Coordinates all skills & emits final report
