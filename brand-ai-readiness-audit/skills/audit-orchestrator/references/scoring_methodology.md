@@ -11,7 +11,8 @@ This reference defines how findings are classified by severity, how suggested ac
 | **Critical** | Fatal blocker preventing content ingestion, rendering, or crawler access. | 100% invisible to AI search; citation agents fail retrieval or receive 4xx/5xx/WAF barrier. | Site crashes or serves blank white page to users without client JavaScript hydration. | `Disallow: /` for `ChatGPT-User` or `PerplexityBot`; WAF interstitial challenge; empty `#root` container. |
 | **High** | Major structural defect severely degrading machine understanding or visitor retention. | AI assistants hallucinate facts or miss key products/pricing due to lack of schema or locked facts. | Visitors bounce within 5 seconds due to missing value proposition or missing primary CTA. | 0 JSON-LD schemas; pricing data trapped in images without alt text; missing H1 headline. |
 | **Medium** | Measurable friction or dilution causing suboptimal retrieval ranking or cognitive load. | Lower cosine similarity in RAG embeddings; entity confusion across competitors; missing OpenGraph snippet tags. | Slower comprehension due to dense walls of text, vague CTA copy, or multiple competing H1s. | Missing `sameAs` entity links; marketing buzzword density > 2%; dense paragraphs > 95 words; missing OpenGraph metadata. |
-| **Low** | Non-critical hygiene or forward-looking optimization. | Minor indexation delay or loss of secondary metadata. | Minor scannability defect or accessibility warning. | Missing XML sitemap in robots.txt; skipped heading level (H1->H3); missing `/llms.txt`; missing BreadcrumbList. |
+| **Low** | Non-critical hygiene or forward-looking optimization. | Minor indexation delay or loss of secondary metadata. | Minor scannability defect or accessibility warning. | Skipped heading level (H1->H3) or orphaned structural tags. |
+| **Info** | Informational baseline confirmation or positive engagement signal. | No impact on score; serves as empirical evidence of positive baseline. | No impact on score. | Excellent On-Site Engagement & Visitor Orientation; Clear Call-to-Action detected. |
 
 ---
 
@@ -24,6 +25,7 @@ To provide non-experts and executive stakeholders with immediate clarity, the au
 * **High**: -15 points per finding
 * **Medium**: -6 points per finding
 * **Low**: -2 points per finding
+* **Info**: -0 points per finding
 
 $$\text{Score} = \max(0, \min(100, 100 - \sum \text{Deductions}))$$
 

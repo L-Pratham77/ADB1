@@ -3,6 +3,11 @@
 Content Quotability & RAG Retrieval Analyzer
 Audits text informativeness, facts locked in non-text (images without alt),
 buzzword density vs factual substance, definition clarity, and /llms.txt support.
+
+Evidence rule: every finding carries a structured evidence object:
+  { "detail": str, "count": int, "fetched_url": str }
+Severity cap: this skill operates on HTML content (heuristics) — maximum severity is HIGH.
+  Only the crawl-render-audit skill emits CRITICAL findings (confirmed via live HTTP).
 """
 
 import sys
@@ -14,6 +19,9 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from html.parser import HTMLParser
 
+# Maximum severity this heuristic skill can emit
+_MAX_SEVERITY = "high"
+
 BUZZWORDS = [
     "paradigm", "synergy", "synergistic", "holistic", "cutting-edge", "next-gen",
     "revolutionary", "disruptive", "world-class", "game-changer", "unmatched",
@@ -23,6 +31,18 @@ BUZZWORDS = [
 CRITICAL_IMAGE_KEYWORDS = [
     "pricing", "price", "table", "comparison", "features", "architecture", "specs", "matrix", "plan"
 ]
+
+
+def _ev(detail, count, fetched_url):
+    """Build a standardised evidence object."""
+    return {"detail": detail, "count": count, "fetched_url": fetched_url}
+
+
+def _cap_severity(sev):
+    """Cap severity to _MAX_SEVERITY for heuristic-only skills."""
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    cap_level = order[_MAX_SEVERITY]
+    return sev if order.get(sev, 99) >= cap_level else _MAX_SEVERITY
 
 
 class ContentExtractor(HTMLParser):
@@ -146,10 +166,14 @@ def run_quotability_audit(target_url, raw_html=None):
     if critical_locked_images:
         findings.append({
             "title": "Critical factual data (pricing/specs/tables) locked in raster images without alt text",
-            "severity": "high",
-            "evidence": (
-                f"Discovered {len(critical_locked_images)} image(s) with filenames matching key factual concepts "
-                f"({', '.join(critical_locked_images[:2])}) lacking descriptive alt text or HTML fallback."
+            "severity": _cap_severity("high"),
+            "evidence": _ev(
+                detail=(
+                    f"Discovered {len(critical_locked_images)} image(s) with filenames matching key factual concepts "
+                    f"({', '.join(critical_locked_images[:2])}) lacking descriptive alt text or HTML fallback."
+                ),
+                count=len(critical_locked_images),
+                fetched_url=target_url
             ),
             "suggested_action": {
                 "summary": "Convert visual diagrams and pricing graphics into native semantic HTML tables or provide comprehensive alt descriptions.",
@@ -160,8 +184,12 @@ def run_quotability_audit(target_url, raw_html=None):
     elif total_images > 3 and (len(missing_alt) / total_images) > 0.4:
         findings.append({
             "title": f"High proportion of images ({len(missing_alt)}/{total_images}) missing alt text",
-            "severity": "medium",
-            "evidence": f"Found {len(missing_alt)} image(s) with completely empty or omitted alt attributes out of {total_images} total.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Found {len(missing_alt)} image(s) with completely empty or omitted alt attributes out of {total_images} total.",
+                count=len(missing_alt),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add concise, informative alt text to all informational images describing what they illustrate.",
                 "priority": "medium",
@@ -181,10 +209,14 @@ def run_quotability_audit(target_url, raw_html=None):
         if buzzword_pct > 2.0:
             findings.append({
                 "title": f"High marketing jargon density ({buzzword_pct:.1f}%) diluting RAG vector retrieval",
-                "severity": "medium",
-                "evidence": (
-                    f"Page contains {buzzword_count} high-abstraction buzzwords across {total_words} words "
-                    f"({buzzword_pct:.1f}% density). Chunks overloaded with empty claims lose relevance in AI cross-encoder rerankers."
+                "severity": _cap_severity("medium"),
+                "evidence": _ev(
+                    detail=(
+                        f"Page contains {buzzword_count} high-abstraction buzzwords across {total_words} words "
+                        f"({buzzword_pct:.1f}% density). Chunks overloaded with empty claims lose relevance in AI cross-encoder rerankers."
+                    ),
+                    count=buzzword_count,
+                    fetched_url=target_url
                 ),
                 "suggested_action": {
                     "summary": "Replace generic marketing fluff with concrete specifications, numbers, and direct capability statements.",
@@ -203,31 +235,20 @@ def run_quotability_audit(target_url, raw_html=None):
     if not has_definition and total_words > 80:
         findings.append({
             "title": "Missing atomic entity definition statement in introductory section",
-            "severity": "high",
-            "evidence": "Opening 150 words lack a definitive subject-predicate-object identity declaration (e.g. '[Brand] is an automated...').",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Opening {min(total_words, 150)} words lack a definitive subject-predicate-object identity declaration (e.g. '[Brand] is an automated...').",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add a crisp, one-sentence canonical definition of the brand/product in the hero paragraph.",
-                "priority": "high",
+                "priority": "medium",
                 "remediation_details": "Structure the opening hero sentence as: '[Brand] is a [category] that [primary benefit] for [target audience].'"
             }
         })
 
-    # 4. Heading Structure & Conversational FAQ Query Matching
-    question_headings = [
-        text for tag, text in extractor.headings
-        if any(text.lower().startswith(q) for q in ["how", "what", "why", "when", "where", "can", "is"]) or "?" in text
-    ]
-    if not question_headings and total_words > 300:
-        findings.append({
-            "title": "Lack of structured Q&A / FAQ format for conversational query matching",
-            "severity": "medium",
-            "evidence": "No question-format headings ('How...', 'What...', '?') found on the page. AI searchers frequently match conversational user queries directly to FAQ structures.",
-            "suggested_action": {
-                "summary": "Include a dedicated FAQ section addressing common buyer and user queries in direct question-and-answer format.",
-                "priority": "medium",
-                "remediation_details": "Add an FAQ section using natural language question headings (e.g. <h3>How does [Product] integrate with our stack?</h3><p>...</p>) to match conversational query patterns in AI search."
-            }
-        })
+
 
     # 5. Check OpenGraph / Social Citation Card Metadata
     has_og_desc = "og:description" in extractor.meta_tags or "description" in extractor.meta_tags
@@ -241,8 +262,12 @@ def run_quotability_audit(target_url, raw_html=None):
             missing_parts.append("og:description")
         findings.append({
             "title": f"Missing OpenGraph ({', '.join(missing_parts)}) metadata for AI search citation cards",
-            "severity": "medium",
-            "evidence": f"Page lacks {', '.join(missing_parts)}. AI assistant search cards (ChatGPT Search, Perplexity) rely on OpenGraph tags to render rich preview snippets.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Page lacks {', '.join(missing_parts)}. AI assistant search cards (ChatGPT Search, Perplexity) rely on OpenGraph tags to render rich preview snippets.",
+                count=len(missing_parts),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add OpenGraph meta tags in <head> for crisp, branded citation card previews in AI assistants.",
                 "priority": "medium",
@@ -256,8 +281,12 @@ def run_quotability_audit(target_url, raw_html=None):
     elif not has_og_image:
         findings.append({
             "title": "Missing 'og:image' OpenGraph tag for visual citation preview cards",
-            "severity": "low",
-            "evidence": "Page defines og:title and description but lacks 'og:image'. Visual thumbnail cards enhance click-through rates from AI referrals.",
+            "severity": _cap_severity("low"),
+            "evidence": _ev(
+                detail="Page defines og:title and description but lacks 'og:image'. Visual thumbnail cards enhance click-through rates from AI referrals.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Specify an og:image meta tag pointing to a high-resolution branded preview card.",
                 "priority": "low",
@@ -265,29 +294,7 @@ def run_quotability_audit(target_url, raw_html=None):
             }
         })
 
-    # 6. Check /llms.txt standard
-    parsed_url = urlparse(target_url)
-    if parsed_url.scheme in ["http", "https"]:
-        llms_url = urljoin(f"{parsed_url.scheme}://{parsed_url.netloc}", "/llms.txt")
-        status, llms_content = fetch_resource(llms_url, timeout=3)
-        if status != 200:
-            findings.append({
-                "title": "No /llms.txt file found for direct AI assistant ingestion",
-                "severity": "low",
-                "evidence": f"GET {llms_url} returned HTTP {status}. Site does not yet offer a curated markdown index for AI crawlers.",
-                "suggested_action": {
-                    "summary": "Publish an /llms.txt file at domain root with curated markdown summaries and key technical links.",
-                    "priority": "low",
-                    "remediation_details": (
-                        "Create https://example.com/llms.txt with core project context:\n"
-                        "# Project Name\n"
-                        "> Concise product summary for LLMs\n"
-                        "## Core Capabilities\n"
-                        "- Feature A: Details\n"
-                        "- Docs: https://example.com/docs"
-                    )
-                }
-            })
+
 
     return findings
 

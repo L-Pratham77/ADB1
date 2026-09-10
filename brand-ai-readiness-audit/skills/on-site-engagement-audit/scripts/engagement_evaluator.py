@@ -3,6 +3,11 @@
 On-Site Engagement & Visitor Retention Evaluator
 Audits above-the-fold value proposition, heading hierarchy,
 Call-to-Action (CTA) hierarchy, readability/walls-of-text, and navigation cues.
+
+Evidence rule: every finding carries a structured evidence object:
+  { "detail": str, "count": int, "fetched_url": str }
+Severity cap: this skill operates on HTML content (heuristics) — maximum severity is HIGH.
+  Only the crawl-render-audit skill emits CRITICAL findings (confirmed via live HTTP).
 """
 
 import sys
@@ -13,12 +18,27 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from html.parser import HTMLParser
 
+# Maximum severity this heuristic skill can emit
+_MAX_SEVERITY = "high"
+
 ACTION_VERBS = [
     "start", "get started", "free trial", "try", "sign up", "demo", "book a demo",
     "schedule", "request", "buy", "purchase", "download", "join", "contact sales"
 ]
 
 VAGUE_CTAS = ["click here", "learn more", "read more", "continue", "submit"]
+
+
+def _ev(detail, count, fetched_url):
+    """Build a standardised evidence object."""
+    return {"detail": detail, "count": count, "fetched_url": fetched_url}
+
+
+def _cap_severity(sev):
+    """Cap severity to _MAX_SEVERITY for heuristic-only skills."""
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    cap_level = order[_MAX_SEVERITY]
+    return sev if order.get(sev, 99) >= cap_level else _MAX_SEVERITY
 
 
 class EngagementExtractor(HTMLParser):
@@ -136,8 +156,12 @@ def run_engagement_audit(target_url, raw_html=None):
     if not h1_list:
         findings.append({
             "title": "Missing above-the-fold <h1> headline for immediate visitor orientation",
-            "severity": "high",
-            "evidence": "0 <h1> elements found. AI-referred visitors cannot quickly confirm whether the landing page matches the answer summary they just read.",
+            "severity": _cap_severity("high"),
+            "evidence": _ev(
+                detail=f"0 <h1> elements found across {len(extractor.headings)} total heading tag(s). AI-referred visitors cannot quickly confirm whether the landing page matches the answer summary they just read.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add a prominent <h1> headline clearly stating what the product does and for whom.",
                 "priority": "high",
@@ -147,8 +171,12 @@ def run_engagement_audit(target_url, raw_html=None):
     elif len(h1_list) > 2:
         findings.append({
             "title": f"Multiple ({len(h1_list)}) <h1> headings create cognitive confusion",
-            "severity": "medium",
-            "evidence": f"Found {len(h1_list)} separate <h1> tags: {h1_list[:2]}... Competing primary headlines dilute topical focus.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Found {len(h1_list)} separate <h1> tags: {h1_list[:2]}... Competing primary headlines dilute topical focus.",
+                count=len(h1_list),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Consolidate into a single canonical <h1> and demote secondary headlines to <h2>.",
                 "priority": "medium",
@@ -162,8 +190,12 @@ def run_engagement_audit(target_url, raw_html=None):
         if len(words) < 3:
             findings.append({
                 "title": f"Overly brief or vague <h1> headline ('{h1_text}')",
-                "severity": "medium",
-                "evidence": f"Primary heading has only {len(words)} word(s). Fails to convey a complete value proposition.",
+                "severity": _cap_severity("medium"),
+                "evidence": _ev(
+                    detail=f"Primary heading has only {len(words)} word(s). Fails to convey a complete value proposition.",
+                    count=len(words),
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
                     "summary": "Expand the <h1> to explicitly state the category, core benefit, and target user.",
                     "priority": "medium",
@@ -173,8 +205,12 @@ def run_engagement_audit(target_url, raw_html=None):
         elif len(words) > 25:
             findings.append({
                 "title": "Excessively verbose <h1> headline exceeding 25 words",
-                "severity": "low",
-                "evidence": f"Primary heading contains {len(words)} words, increasing cognitive load and reading friction.",
+                "severity": _cap_severity("low"),
+                "evidence": _ev(
+                    detail=f"Primary heading contains {len(words)} words, increasing cognitive load and reading friction.",
+                    count=len(words),
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
                     "summary": "Shorten the <h1> to 6–12 impactful words and move explanatory details into a subheadline.",
                     "priority": "low",
@@ -193,8 +229,12 @@ def run_engagement_audit(target_url, raw_html=None):
     if skipped_levels:
         findings.append({
             "title": "Disordered heading hierarchy (skipped heading levels)",
-            "severity": "low",
-            "evidence": f"Detected jumps in heading hierarchy: {skipped_levels[:2]} (e.g. H{skipped_levels[0][0]} directly to H{skipped_levels[0][1]}).",
+            "severity": _cap_severity("low"),
+            "evidence": _ev(
+                detail=f"Detected {len(skipped_levels)} jump(s) in heading hierarchy: {skipped_levels[:2]} (e.g. H{skipped_levels[0][0]} directly to H{skipped_levels[0][1]}).",
+                count=len(skipped_levels),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Maintain sequential heading progression (H1 -> H2 -> H3) for accessibility and document scannability.",
                 "priority": "low",
@@ -217,8 +257,12 @@ def run_engagement_audit(target_url, raw_html=None):
     if not actionable_ctas and not all_ctas:
         findings.append({
             "title": "No primary Call-to-Action (CTA) buttons detected on page",
-            "severity": "high",
-            "evidence": "Audited interactive elements; found 0 prominent action buttons or CTA links. Arriving visitors have no clear next step.",
+            "severity": _cap_severity("high"),
+            "evidence": _ev(
+                detail=f"Audited {len(extractor.links)} link(s) and 0 button elements; found 0 prominent action buttons or CTA links. Arriving visitors have no clear next step.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Place a prominent, high-contrast Call-to-Action button above the fold (e.g. 'Start Free Trial' or 'Book a Demo').",
                 "priority": "high",
@@ -228,8 +272,12 @@ def run_engagement_audit(target_url, raw_html=None):
     elif vague_ctas_found and not actionable_ctas:
         findings.append({
             "title": f"Generic, low-intent Call to Action ({vague_ctas_found[0]})",
-            "severity": "medium",
-            "evidence": f"Buttons rely on low-information phrases like '{vague_ctas_found[0]}' instead of specifying the tangible outcome or offer.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Found {len(vague_ctas_found)} button(s) relying on low-information phrases like '{vague_ctas_found[0]}' instead of specifying the tangible outcome or offer.",
+                count=len(vague_ctas_found),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Replace generic labels with outcome-oriented copy (e.g., change 'Learn More' to 'Explore Interactive Demo').",
                 "priority": "medium",
@@ -242,8 +290,12 @@ def run_engagement_audit(target_url, raw_html=None):
     if long_paragraphs:
         findings.append({
             "title": f"Dense 'walls of text' ({len(long_paragraphs)} paragraphs > 95 words) impeding scannability",
-            "severity": "medium",
-            "evidence": f"Discovered {len(long_paragraphs)} paragraph(s) exceeding 95 words without structural breaks. Increases reader drop-off.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Discovered {len(long_paragraphs)} paragraph(s) exceeding 95 words without structural breaks. Increases reader drop-off.",
+                count=len(long_paragraphs),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Break long text blocks into 2–3 sentence paragraphs supplemented by bulleted lists or callout cards.",
                 "priority": "medium",
@@ -255,12 +307,38 @@ def run_engagement_audit(target_url, raw_html=None):
     if not extractor.has_nav:
         findings.append({
             "title": "Missing semantic <nav> navigation container",
-            "severity": "medium",
-            "evidence": "Page lacks an explicit <nav> element. Makes secondary exploration difficult for visitors seeking additional context.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail="Page lacks an explicit <nav> element. Makes secondary exploration difficult for visitors seeking additional context.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Wrap header navigation in a semantic <nav> element with links to Home, Products, Docs, and Pricing.",
                 "priority": "medium",
                 "remediation_details": "Enclose header menu links in a semantic <nav aria-label='Main Navigation'> element: <nav><ul><li><a href='/'>Home</a></li><li><a href='/products'>Products</a></li><li><a href='/pricing'>Pricing</a></li></ul></nav>."
+            }
+        })
+
+    if not findings:
+        evidence_text = (
+            f"Value proposition clarity & above-the-fold topic match confirmed via semantic <h1>. "
+            f"CTA relevance established ({len(actionable_ctas)} high-intent buttons). "
+            f"Clear navigation/orientation (<nav> present). "
+            f"Strong content-to-intent match (0 dense text walls)."
+        )
+        findings.append({
+            "title": "Excellent On-Site Engagement & Visitor Orientation",
+            "severity": "info",
+            "evidence": _ev(
+                detail=evidence_text,
+                count=len(actionable_ctas),
+                fetched_url=target_url
+            ),
+            "suggested_action": {
+                "summary": "Maintain this high standard of cognitive clarity and strong value propositions.",
+                "priority": "info",
+                "remediation_details": "No action needed."
             }
         })
 

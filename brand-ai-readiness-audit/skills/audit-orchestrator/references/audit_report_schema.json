@@ -57,11 +57,11 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["critical", "high", "medium", "low"],
+            "enum": ["critical", "high", "medium", "low", "info"],
             "description": "Impact severity of the finding."
           },
           "evidence": {
-            "type": "string",
+            "type": ["string", "object"],
             "description": "Empirical evidence, counts, or code snippets backing the finding."
           },
           "suggested_action": {

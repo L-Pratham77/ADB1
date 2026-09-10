@@ -4,7 +4,7 @@ description: Master entrypoint skill for Brand AI-Readiness and On-Site Engageme
 license: Apache-2.0
 allowed-tools: [python, bash]
 metadata:
-  version: "1.0.0"
+  version: "2.1.0"
   category: "orchestration"
   entrypoint: true
   framework: "agentskills.io"
@@ -51,13 +51,30 @@ Emits the standardized audit report matching the hackathon specification:
 {
   "site": "example.com",
   "audited_at": "2026-09-20T14:32:00Z",
+  "audit_metadata": {
+    "version": "2.1.0",
+    "skills_run": ["crawl-render-audit", "structured-data-entity-audit", "content-quotability-audit", "on-site-engagement-audit"],
+    "checks_skipped": [],
+    "mode": "live"
+  },
   "summary": {
     "total_findings": 6,
     "critical": 1,
     "high": 2,
     "medium": 3,
     "low": 0,
+    "info": 0,
+    "checks_skipped": 0,
+    "degraded": false,
+    "pages_by_type": {
+      "home": 1,
+      "subpages": 2,
+      "checked_live": 3
+    },
     "ai_readiness_score": 67,
+    "previous_score": 55,
+    "score_trend": 12,
+    "score_basis": "Weighted deduction from 6 finding(s)...",
     "scores": {
       "discoverability": 65,
       "engagement": 70
@@ -68,7 +85,11 @@ Emits the standardized audit report matching the hackathon specification:
       "id": "F-001",
       "title": "No JSON-LD structured data on product pages",
       "severity": "high",
-      "evidence": "Crawled product page; contains 0 schema.org markup blocks.",
+      "evidence": {
+        "detail": "Crawled product page; contains 0 schema.org markup blocks.",
+        "count": 0,
+        "fetched_url": "https://example.com/products"
+      },
       "suggested_action": {
         "summary": "Add Product/Offer JSON-LD to every product page.",
         "priority": "high",

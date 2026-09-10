@@ -4,7 +4,7 @@ description: Audit on-site visitor orientation, 3-second value proposition clari
 license: Apache-2.0
 allowed-tools: [python, bash]
 metadata:
-  version: "1.0.0"
+  version: "2.1.0"
   category: "on-site-engagement"
   framework: "agentskills.io"
 ---
@@ -44,7 +44,11 @@ Emits finding dictionaries adhering to the marketplace schema:
   {
     "title": "Missing above-the-fold <h1> headline for immediate visitor orientation",
     "severity": "high",
-    "evidence": "0 <h1> elements found. AI-referred visitors cannot quickly confirm topic match.",
+    "evidence": {
+      "detail": "0 <h1> elements found. AI-referred visitors cannot quickly confirm topic match.",
+      "count": 0,
+      "fetched_url": "https://example.com"
+    },
     "suggested_action": {
       "summary": "Add a prominent <h1> headline clearly stating what the product does and for whom.",
       "priority": "high"

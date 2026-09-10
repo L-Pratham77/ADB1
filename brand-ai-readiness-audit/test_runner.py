@@ -105,7 +105,9 @@ Disallow: /
         blocked_findings = [f for f in findings if "AI search and citation bots explicitly blocked" in f["title"]]
         self.assertEqual(len(blocked_findings), 1)
         self.assertEqual(blocked_findings[0]["severity"], "critical")
-        self.assertIn("ChatGPT-User", blocked_findings[0]["evidence"])
+        ev = blocked_findings[0]["evidence"]
+        evidence_text = ev["detail"] if isinstance(ev, dict) else ev
+        self.assertIn("ChatGPT-User", evidence_text)
 
     def test_client_side_rendering_hydration_gap(self):
         mock_csr_html = """
@@ -137,7 +139,7 @@ Disallow: /
         findings = run_schema_audit("https://testbrand.com", raw_html=mock_html_no_schema)
         schema_findings = [f for f in findings if "No Schema.org structured data" in f["title"]]
         self.assertEqual(len(schema_findings), 1)
-        self.assertEqual(schema_findings[0]["severity"], "high")
+        self.assertEqual(schema_findings[0]["severity"], "medium")
 
     def test_locked_facts_in_images_and_jargon(self):
         mock_html = """
@@ -189,7 +191,8 @@ Disallow: /
         blocked_findings = [f for f in findings if "AI search and citation bots explicitly blocked" in f["title"]]
         self.assertEqual(len(blocked_findings), 1)
         # Verify that only the explicitly blocked bots are listed, and other bots (like Claude-Web) are NOT blocked
-        evidence = blocked_findings[0]["evidence"]
+        ev = blocked_findings[0]["evidence"]
+        evidence = ev["detail"] if isinstance(ev, dict) else ev
         self.assertIn("ChatGPT-User", evidence)
         self.assertIn("PerplexityBot", evidence)
         self.assertNotIn("Claude-Web", evidence)
@@ -236,7 +239,7 @@ Disallow: /
 </body>
 </html>
 """
-        findings = run_schema_audit("https://testbrand.com", raw_html=mock_html)
+        findings = run_schema_audit("https://testbrand.com/pricing", raw_html=mock_html)
         pricing_findings = [f for f in findings if "Commercial or pricing content present" in f["title"]]
         self.assertEqual(len(pricing_findings), 1)
 
@@ -254,9 +257,9 @@ Disallow: /
 </html>
 """
         report = run_full_audit("https://testbrand.com", raw_html=mock_html, raw_robots="User-agent: *\nAllow: /")
-        h1_findings = [f for f in report["findings"] if "Missing <h1> headline" in f["title"]]
+        h1_findings = [f for f in report["findings"] if "Missing primary <h1>" in f["title"]]
         self.assertEqual(len(h1_findings), 1, "Expected exactly 1 harmonized H1 finding")
-        self.assertIn("critical for both AI topic extraction and visitor orientation", h1_findings[0]["title"])
+        self.assertIn("Missing primary <h1> headline", h1_findings[0]["title"])
 
 
 class TestEndToEndOrchestrationAndReportSchema(unittest.TestCase):
@@ -346,5 +349,187 @@ Sitemap: https://acme.com/sitemap.xml
         self.assertIn("og:description", og_findings[0]["suggested_action"]["remediation_details"])
 
 
+class TestPhase1Fixes(unittest.TestCase):
+    """Validates Phase 1 engineering gap fixes: structured evidence, severity capping,
+    checks_skipped field, and evidence schema enforcement."""
+
+    def test_evidence_is_structured_dict(self):
+        """Every finding from every skill must carry a structured evidence object."""
+        mock_html = """<!DOCTYPE html>
+<html>
+<head><title>Test Brand</title></head>
+<body>
+  <nav><a href="/">Home</a></nav>
+  <h1>Test Brand Platform</h1>
+  <p>Test Brand is a platform that automates auditing for enterprises.</p>
+  <button class="btn">Get Started Free</button>
+</body>
+</html>"""
+        mock_robots = "User-agent: *\nAllow: /\nSitemap: https://testbrand.com/sitemap.xml\n"
+        report = run_full_audit("https://testbrand.com", raw_html=mock_html, raw_robots=mock_robots)
+
+        for f in report["findings"]:
+            ev = f["evidence"]
+            self.assertIsInstance(ev, dict, f"Finding '{f['id']}' evidence should be a dict, got {type(ev).__name__}")
+            self.assertIn("detail", ev, f"Finding '{f['id']}' evidence missing 'detail'")
+            self.assertIn("count", ev, f"Finding '{f['id']}' evidence missing 'count'")
+            self.assertIn("fetched_url", ev, f"Finding '{f['id']}' evidence missing 'fetched_url'")
+            self.assertIsInstance(ev["detail"], str, f"Finding '{f['id']}' evidence.detail must be a string")
+            self.assertIsInstance(ev["count"], int, f"Finding '{f['id']}' evidence.count must be an int")
+
+    def test_heuristic_skills_cannot_emit_critical(self):
+        """Schema, quotability, and engagement skills must never emit 'critical' severity."""
+        mock_html = """<!DOCTYPE html>
+<html>
+<head><title>No Schema Site</title></head>
+<body>
+  <h1>Product</h1>
+  <p>Price: $499/month. Buy now!</p>
+  <img src="/pricing_table.png" />
+</body>
+</html>"""
+        schema_findings = run_schema_audit("https://testbrand.com", raw_html=mock_html)
+        for f in schema_findings:
+            self.assertNotEqual(f["severity"], "critical",
+                f"schema_inspector emitted critical: '{f['title']}' — heuristic skills must cap at 'high'")
+
+        quotability_findings = run_quotability_audit("https://testbrand.com", raw_html=mock_html)
+        for f in quotability_findings:
+            self.assertNotEqual(f["severity"], "critical",
+                f"quotability_analyzer emitted critical: '{f['title']}' — heuristic skills must cap at 'high'")
+
+        engagement_findings = run_engagement_audit("https://testbrand.com", raw_html=mock_html)
+        for f in engagement_findings:
+            self.assertNotEqual(f["severity"], "critical",
+                f"engagement_evaluator emitted critical: '{f['title']}' — heuristic skills must cap at 'high'")
+
+    def test_checks_skipped_and_degraded_in_summary(self):
+        """Report summary must always include checks_skipped count and degraded flag."""
+        mock_html = "<html><body><h1>Test</h1></body></html>"
+        report = run_full_audit("https://testbrand.com", raw_html=mock_html, raw_robots="User-agent: *\nAllow: /\n")
+
+        self.assertIn("checks_skipped", report["summary"],
+            "summary must contain 'checks_skipped' field")
+        self.assertIn("degraded", report["summary"],
+            "summary must contain 'degraded' field")
+        self.assertIsInstance(report["summary"]["checks_skipped"], int)
+        self.assertIsInstance(report["summary"]["degraded"], bool)
+
+        # When all skills run cleanly, degraded must be False and skipped must be 0
+        self.assertEqual(report["summary"]["checks_skipped"], 0)
+        self.assertFalse(report["summary"]["degraded"])
+
+
+class TestRealHTTPE2EFixture(unittest.TestCase):
+    """Runs a full audit against a real HTTP server on localhost (served over an actual socket)."""
+
+    _FIXTURE_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <title>Acme Real HTTP Fixture</title>
+  <meta property="og:title" content="Acme AI Platform">
+  <meta property="og:description" content="Acme is the leading AI readiness platform.">
+  <script type="application/ld+json">
+  {"@context": "https://schema.org", "@type": "Organization", "name": "Acme Corp",
+   "url": "http://localhost", "sameAs": ["https://www.wikidata.org/wiki/Q12345"]}
+  </script>
+</head>
+<body>
+  <nav><a href="/">Home</a> | <a href="/pricing">Pricing</a></nav>
+  <h1>Acme AI Readiness Platform</h1>
+  <p>Acme is a cloud platform that automates AI-readiness auditing for enterprise teams.</p>
+  <a href="/signup" class="btn btn-primary">Start Free Trial</a>
+</body>
+</html>"""
+
+    _FIXTURE_ROBOTS = b"User-agent: *\nAllow: /\nSitemap: http://localhost/sitemap.xml\n"
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+        import socket
+
+        html_bytes = cls._FIXTURE_HTML.encode("utf-8")
+        robots_bytes = cls._FIXTURE_ROBOTS
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == "/robots.txt":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(robots_bytes)
+                elif self.path in ["/llms.txt"]:
+                    self.send_response(404)
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(html_bytes)
+
+            def log_message(self, *args):
+                pass  # silence server logs during tests
+
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            cls.port = s.getsockname()[1]
+
+        cls.httpd = http.server.HTTPServer(("127.0.0.1", cls.port), _Handler)
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever)
+        cls.thread.daemon = True
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.httpd:
+            cls.httpd.shutdown()
+
+    def test_real_http_e2e_full_audit(self):
+        """Full audit through an actual socket — validates schema, evidence structure, and score."""
+        url = f"http://127.0.0.1:{self.port}/"
+        report = run_full_audit(url)
+
+        # Schema compliance
+        is_valid, errors = validate_report_schema(report)
+        self.assertTrue(is_valid, f"Report failed schema validation: {errors}")
+
+        # Required top-level fields — normalize_target_url strips port from site name
+        self.assertIn("127.0.0.1", report["site"])
+        self.assertIn("audited_at", report)
+        self.assertIn("audit_metadata", report)
+        self.assertIn("findings", report)
+
+        # audit_metadata fields
+        meta = report["audit_metadata"]
+        self.assertIn("version", meta)
+        self.assertIn("skills_run", meta)
+        self.assertIn("checks_skipped", meta)
+        self.assertEqual(meta["mode"], "live")
+
+        # All evidence must be structured dicts (real HTTP run)
+        for f in report["findings"]:
+            ev = f["evidence"]
+            self.assertIsInstance(ev, dict,
+                f"Finding '{f['id']}' evidence is {type(ev).__name__}, expected dict")
+            self.assertIn("fetched_url", ev)
+            self.assertTrue(
+                ev["fetched_url"].startswith("http://127.0.0.1"),
+                f"Finding '{f['id']}' evidence.fetched_url should be the localhost fixture URL"
+            )
+
+        # Score must be a valid integer 0–100
+        score = report["summary"]["ai_readiness_score"]
+        self.assertIsInstance(score, int)
+        self.assertGreaterEqual(score, 0)
+        self.assertLessEqual(score, 100)
+
+        # No skills skipped on a clean run
+        self.assertEqual(report["summary"]["checks_skipped"], 0)
+        self.assertFalse(report["summary"]["degraded"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

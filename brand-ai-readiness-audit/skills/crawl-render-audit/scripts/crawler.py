@@ -3,6 +3,11 @@
 Crawl & Render Audit Tool
 Inspects robots.txt directives, AI bot access permissions, HTTP headers,
 meta indexation tags, sitemaps, and client-side rendering (CSR) hydration gaps.
+
+Evidence rule: every finding carries a structured evidence object:
+  { "detail": str, "count": int, "fetched_url": str }
+Severity rule: critical is ONLY emitted when the fact is directly confirmed
+  by a live HTTP response (status code, header, fetched body).
 """
 
 import sys
@@ -27,6 +32,11 @@ AI_BOTS = [
     "Bytespider",
     "Applebot-Extended"
 ]
+
+
+def _ev(detail, count, fetched_url):
+    """Build a standardised evidence object."""
+    return {"detail": detail, "count": count, "fetched_url": fetched_url}
 
 
 class BasicHTMLTextExtractor(HTMLParser):
@@ -232,15 +242,15 @@ def parse_robots_txt(robots_content):
 def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
     """
     Performs crawl and render audit on target URL or provided HTML/robots content.
-    Returns list of findings.
+    Returns list of findings. Evidence is always a structured dict.
     """
     findings = []
     parsed_url = urlparse(target_url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 
     # 1. Inspect robots.txt
+    robots_url = urljoin(base_url, "/robots.txt")
     if raw_robots is None and parsed_url.scheme in ["http", "https"]:
-        robots_url = urljoin(base_url, "/robots.txt")
         code, _, robots_content = fetch_url(robots_url)
     else:
         code = 200 if raw_robots else 404
@@ -248,19 +258,23 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
 
     if code == 200 and robots_content:
         robots_analysis = parse_robots_txt(robots_content)
-        
+
         # Check blocked AI search and citation crawlers
         blocked_citation_bots = [
             bot for bot in ["ChatGPT-User", "OAI-SearchBot", "PerplexityBot", "Claude-Web"]
             if robots_analysis["bot_status"].get(bot, {}).get("disallowed_all")
         ]
-        
+
         bot_declarations = "\nUser-agent: ".join(blocked_citation_bots)
         if blocked_citation_bots:
             findings.append({
                 "title": f"AI search and citation bots explicitly blocked in robots.txt ({', '.join(blocked_citation_bots)})",
                 "severity": "critical",
-                "evidence": f"robots.txt disallows root access for live assistant citation agents: {', '.join(blocked_citation_bots)}.",
+                "evidence": _ev(
+                    detail=f"robots.txt disallows root access for live assistant citation agents: {', '.join(blocked_citation_bots)}.",
+                    count=len(blocked_citation_bots),
+                    fetched_url=robots_url
+                ),
                 "suggested_action": {
                     "summary": f"Allow citation crawlers in robots.txt so AI assistants can verify and cite your domain in user answers.",
                     "priority": "critical",
@@ -281,7 +295,11 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             findings.append({
                 "title": f"AI training crawlers restricted in robots.txt ({', '.join(blocked_training_bots)})",
                 "severity": "medium",
-                "evidence": f"Domain blocks foundation model indexing agents: {', '.join(blocked_training_bots)}.",
+                "evidence": _ev(
+                    detail=f"Domain blocks foundation model indexing agents: {', '.join(blocked_training_bots)}.",
+                    count=len(blocked_training_bots),
+                    fetched_url=robots_url
+                ),
                 "suggested_action": {
                     "summary": "Review bot governance policy; allow AI search bots while selectively gating model training if desired.",
                     "priority": "medium",
@@ -293,23 +311,16 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
                 }
             })
 
-        # Check Sitemap declaration
-        if not robots_analysis["sitemaps"]:
-            findings.append({
-                "title": "Missing XML Sitemap declaration in robots.txt",
-                "severity": "medium",
-                "evidence": "No 'Sitemap: https://...' directive discovered in robots.txt.",
-                "suggested_action": {
-                    "summary": "Declare canonical XML sitemap location at the bottom of robots.txt.",
-                    "priority": "medium",
-                    "remediation_details": f"Add `Sitemap: {base_url}/sitemap.xml` to robots.txt."
-                }
-            })
+
     elif code == 404:
         findings.append({
             "title": "No robots.txt discovered on domain root",
             "severity": "low",
-            "evidence": f"GET {base_url}/robots.txt returned HTTP 404 Not Found.",
+            "evidence": _ev(
+                detail=f"GET {base_url}/robots.txt returned HTTP 404 Not Found.",
+                count=0,
+                fetched_url=robots_url
+            ),
             "suggested_action": {
                 "summary": "Create a clear, permissive robots.txt declaring explicit bot allowances and sitemap path.",
                 "priority": "low",
@@ -329,7 +340,11 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         findings.append({
             "title": "Target page unreachable or returned empty payload",
             "severity": "critical",
-            "evidence": f"Failed to retrieve HTML content from {target_url} (HTTP status: {code}).",
+            "evidence": _ev(
+                detail=f"Failed to retrieve HTML content from {target_url} (HTTP status: {code}).",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Verify target server availability, firewall permissions, and SSL certificate validity.",
                 "priority": "critical",
@@ -341,13 +356,17 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         })
         return findings
 
-    # Check X-Robots-Tag HTTP header
+    # Check X-Robots-Tag HTTP header (confirmed by live fetch → critical allowed)
     x_robots = headers.get("x-robots-tag", "").lower()
     if "noindex" in x_robots or "nosnippet" in x_robots:
         findings.append({
             "title": "Restrictive X-Robots-Tag detected in HTTP response headers",
             "severity": "critical",
-            "evidence": f"Server sent header 'X-Robots-Tag: {x_robots}', which instructs crawlers not to index or quote text snippets.",
+            "evidence": _ev(
+                detail=f"Server sent header 'X-Robots-Tag: {x_robots}', which instructs crawlers not to index or quote text snippets.",
+                count=1,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Remove 'noindex' and 'nosnippet' directives from server HTTP response headers for public pages.",
                 "priority": "critical",
@@ -359,7 +378,7 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             }
         })
 
-    # Check for WAF / Anti-Bot Interstitials and CAPTCHAs
+    # Check for WAF / Anti-Bot Interstitials and CAPTCHAs (confirmed by live fetch → critical allowed)
     html_lower = html.lower()
     waf_signals = []
     if "awswaf" in html_lower or "gokuprops" in html_lower or "aws-waf" in html_lower:
@@ -372,6 +391,12 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         waf_signals.append("DataDome bot protection")
     if "perimeterx" in html_lower or "px-captcha" in html_lower:
         waf_signals.append("PerimeterX / HUMAN bot challenge")
+    if "incapsula" in html_lower or "visid_incap" in html_lower:
+        waf_signals.append("Imperva / Incapsula WAF interstitial")
+    if "sucuri" in html_lower and "sucuri-webguard" in html_lower:
+        waf_signals.append("Sucuri WAF challenge")
+    if "rb_waf" in html_lower:
+        waf_signals.append("Reblaze WAF protection")
     if ("captcha" in html_lower or "robot check" in html_lower) and len(html) < 4000:
         waf_signals.append("Automated CAPTCHA / Bot Barrier")
 
@@ -379,9 +404,13 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         findings.append({
             "title": f"Automated bot challenge or WAF interception detected ({waf_signals[0]})",
             "severity": "critical",
-            "evidence": (
-                f"Initial HTTP response payload is intercepted by a security WAF challenge: {', '.join(waf_signals)}. "
-                "AI search assistants and retrieval crawlers cannot solve JavaScript interstitials and will drop citations."
+            "evidence": _ev(
+                detail=(
+                    f"Initial HTTP response payload is intercepted by a security WAF challenge: {', '.join(waf_signals)}. "
+                    "AI search assistants and retrieval crawlers cannot solve JavaScript interstitials and will drop citations."
+                ),
+                count=len(waf_signals),
+                fetched_url=target_url
             ),
             "suggested_action": {
                 "summary": "Configure WAF allowlists or bot management bypass rules for verified AI assistant crawlers (e.g. OpenAI, Anthropic, Perplexity).",
@@ -394,16 +423,20 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
     parser = BasicHTMLTextExtractor()
     try:
         parser.feed(html)
-    except Exception as e:
+    except Exception:
         pass
 
-    # Check Meta Robots tag
+    # Check Meta Robots tag (confirmed in fetched HTML → critical allowed)
     for name, content in parser.meta_robots:
         if "noindex" in content or "nosnippet" in content:
             findings.append({
                 "title": f"Meta tag <meta name='{name}' content='{content}'> blocks indexation or quoting",
                 "severity": "critical",
-                "evidence": f"Found meta tag instructing crawlers not to index or snippet page content.",
+                "evidence": _ev(
+                    detail=f"Found meta tag instructing crawlers not to index or snippet page content.",
+                    count=1,
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
                     "summary": "Update meta robots tag to allow indexing and snippet generation: <meta name='robots' content='index, follow, max-snippet:-1'>.",
                     "priority": "critical",
@@ -411,7 +444,7 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
                 }
             })
 
-    # Check Client-Side Rendering (CSR) Hydration Gap
+    # Check Client-Side Rendering (CSR) Hydration Gap (confirmed by DOM inspection → critical allowed)
     extracted_text = " ".join(parser.text_parts)
     text_length = len(extracted_text)
     html_length = len(html)
@@ -421,9 +454,13 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         findings.append({
             "title": "Severe Client-Side JavaScript Hydration Gap (Empty Initial DOM)",
             "severity": "critical",
-            "evidence": (
-                f"Initial raw HTML contains empty client root container with only {text_length} characters of text "
-                f"across {html_length} bytes of markup. AI crawlers without full headless JS rendering cannot see page content."
+            "evidence": _ev(
+                detail=(
+                    f"Initial raw HTML contains empty client root container with only {text_length} characters of text "
+                    f"across {html_length} bytes of markup. AI crawlers without full headless JS rendering cannot see page content."
+                ),
+                count=text_length,
+                fetched_url=target_url
             ),
             "suggested_action": {
                 "summary": "Implement Server-Side Rendering (SSR) or Static Site Generation (SSG) so critical text is present in the initial HTML payload.",
@@ -433,12 +470,16 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
         })
     elif text_ratio < 6.0 and html_length > 15000:
         findings.append({
-            "title": "Abnormally low text-to-HTML ratio (< 6%) indicates high script boilerplate",
-            "severity": "high",
-            "evidence": f"Page payload is {html_length:,} bytes but contains only {text_length:,} characters of visible text ({text_ratio:.1f}% ratio).",
+            "title": "Low raw-HTML text density detected",
+            "severity": "medium",
+            "evidence": _ev(
+                detail=f"Page payload is {html_length:,} bytes but contains only {text_length:,} characters of visible text ({text_ratio:.1f}% ratio).",
+                count=text_length,
+                fetched_url=target_url
+            ),
             "suggested_action": {
-                "summary": "Reduce inline script weight and defer non-critical JavaScript to improve raw HTML text density for AI extractors.",
-                "priority": "high",
+                "summary": "Verify that important content is server-readable.",
+                "priority": "medium",
                 "remediation_details": (
                     "Extract inline script bundles to deferred external assets and pre-render factual text:\n"
                     '<script src="/static/bundle.js" defer></script>'
@@ -446,15 +487,19 @@ def run_crawl_audit(target_url, raw_html=None, raw_robots=None):
             }
         })
 
-    # Check for missing H1 in raw DOM
+    # Check for missing H1 in raw DOM (heuristic on HTML → capped at high)
     if not parser.h1_tags:
         findings.append({
             "title": "Missing semantic <h1> heading in initial HTML response",
-            "severity": "high",
-            "evidence": "Raw HTML contains 0 <h1> elements. AI extractors rely on <h1> to establish the primary subject of a document.",
+            "severity": "medium",
+            "evidence": _ev(
+                detail="Raw HTML contains 0 <h1> elements. AI extractors rely on <h1> to establish the primary subject of a document.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Include a single, descriptive <h1> element in the initial server-rendered HTML payload clearly identifying the page topic.",
-                "priority": "high",
+                "priority": "medium",
                 "remediation_details": "Add a server-rendered <h1> in the main content container:\n<header>\n  <h1>Core Brand & Value Proposition</h1>\n</header>"
             }
         })

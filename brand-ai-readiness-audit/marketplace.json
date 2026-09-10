@@ -1,6 +1,6 @@
 {
   "name": "brand-ai-readiness-audit",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Agent Skill Marketplace for auditing website AI Discoverability and On-Site Engagement readiness.",
   "skills": [
     {

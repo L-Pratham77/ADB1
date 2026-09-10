@@ -1,15 +1,6 @@
-python run_audit.py https://example.com
-
-Optional 1-Run Flags:
-Save to a file:
-bash
-python run_audit.py https://example.com --output report.json
-View as Markdown:
-bash
-python run_audit.py https://example.com --format markdown
-
-
-=================================================================
+================================================================================
+BRAND AI-READINESS AUDIT (ADOBE HACKATHON) - HOW TO RUN
+=================================================================================================================================================
 
 PREREQUISITES:
 --------------
@@ -19,7 +10,7 @@ PREREQUISITES:
 
 
 ================================================================================
-1. RUNNING THE AUTOMATED TEST SUITE (13 UNIT & INTEGRATION TESTS)
+1. RUNNING THE AUTOMATED TEST SUITE (17 UNIT, E2E & INTEGRATION TESTS)
 ================================================================================
 To verify all skill checks, agentskills.io format compliance, marketplace manifest,
 and end-to-end orchestration against mock fixtures:

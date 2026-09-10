@@ -3,6 +3,11 @@
 Structured Data & Entity Authority Inspector
 Extracts, parses, and validates JSON-LD schemas and Microdata.
 Audits entity disambiguation (sameAs), organization identity, and product schemas.
+
+Evidence rule: every finding carries a structured evidence object:
+  { "detail": str, "count": int, "fetched_url": str }
+Severity cap: this skill operates on HTML content (heuristics) — maximum severity is HIGH.
+  Only the crawl-render-audit skill emits CRITICAL findings (confirmed via live HTTP).
 """
 
 import sys
@@ -13,6 +18,21 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from html.parser import HTMLParser
+
+# Maximum severity this heuristic skill can emit
+_MAX_SEVERITY = "high"
+
+
+def _ev(detail, count, fetched_url):
+    """Build a standardised evidence object."""
+    return {"detail": detail, "count": count, "fetched_url": fetched_url}
+
+
+def _cap_severity(sev):
+    """Cap severity to _MAX_SEVERITY for heuristic-only skills."""
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    cap_level = order[_MAX_SEVERITY]
+    return sev if order.get(sev, 99) >= cap_level else _MAX_SEVERITY
 
 
 class JSONLDExtractor(HTMLParser):
@@ -61,7 +81,7 @@ def fetch_page(url, timeout=7):
     try:
         with urlopen(req, timeout=timeout, context=ctx) as resp:
             return resp.read().decode("utf-8", errors="replace")
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -107,8 +127,12 @@ def run_schema_audit(target_url, raw_html=None):
         for block_num, err in syntax_errors:
             findings.append({
                 "title": f"Malformed JSON-LD syntax in script block #{block_num}",
-                "severity": "high",
-                "evidence": f"Failed to parse JSON-LD block #{block_num}: {err}.",
+                "severity": _cap_severity("high"),
+                "evidence": _ev(
+                    detail=f"Failed to parse JSON-LD block #{block_num}: {err}.",
+                    count=len(syntax_errors),
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
                     "summary": "Fix JSON syntax errors (e.g. unescaped quotes, trailing commas) so AI crawlers can parse schema triples.",
                     "priority": "high",
@@ -130,11 +154,15 @@ def run_schema_audit(target_url, raw_html=None):
     if not parsed_schemas and not extractor.microdata_items:
         findings.append({
             "title": "No Schema.org structured data (JSON-LD or Microdata) found",
-            "severity": "high",
-            "evidence": "Crawled page; found 0 JSON-LD blocks and 0 Microdata itemscope tags. AI assistants cannot extract structured factual triples without inference.",
+            "severity": _cap_severity("medium"),
+            "evidence": _ev(
+                detail=f"Crawled page; found {len(extractor.json_ld_blocks)} JSON-LD blocks and 0 Microdata itemscope tags. AI assistants cannot extract structured factual triples without inference.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Inject Schema.org JSON-LD structured data for Organization, WebSite, and primary offerings.",
-                "priority": "high",
+                "priority": "medium",
                 "remediation_details": "Add an <script type='application/ld+json'> block in <head> defining Organization and WebSite schemas."
             }
         })
@@ -149,17 +177,25 @@ def run_schema_audit(target_url, raw_html=None):
         elif isinstance(stype, str):
             schema_types.add(stype)
 
-    # 3. Check Organization / Entity Presence
+    # 3. Check Organization / Entity Presence (Only on root or about pages)
+    parsed_url = urlparse(target_url)
+    path = parsed_url.path.strip("/").lower()
+    is_root_or_about = path in ["", "about", "company", "about-us", "contact"]
+    
     org_schemas = [
         s for s in parsed_schemas
         if s.get("@type") in ["Organization", "Corporation", "LocalBusiness", "NGO"]
     ]
 
-    if not org_schemas:
+    if not org_schemas and is_root_or_about:
         findings.append({
             "title": "Missing Organization Schema for brand identity and authority",
-            "severity": "high",
-            "evidence": f"Structured data contains schemas: {list(schema_types)}, but lacks an Organization or Corporation entity definition.",
+            "severity": _cap_severity("high"),
+            "evidence": _ev(
+                detail=f"Structured data contains {len(schema_types)} schema type(s): {sorted(list(schema_types))}, but lacks an Organization or Corporation entity definition.",
+                count=0,
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add Schema.org Organization markup with legal name, official logo, founding date, and sameAs links.",
                 "priority": "high",
@@ -185,10 +221,14 @@ def run_schema_audit(target_url, raw_html=None):
         if not all_same_as:
             findings.append({
                 "title": "Missing 'sameAs' entity corroboration links in Organization schema",
-                "severity": "medium",
-                "evidence": "Organization schema found, but 'sameAs' property is missing or empty. Increases risk of entity ambiguity and hallucination.",
+                "severity": _cap_severity("medium"),
+                "evidence": _ev(
+                    detail="Organization schema found, but 'sameAs' property is missing or empty. Increases risk of entity ambiguity and hallucination.",
+                    count=0,
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
-                    "summary": "Add 'sameAs' array linking to verified external knowledge bases (Wikidata, Wikipedia, LinkedIn, Crunchbase).",
+                    "summary": "Add 'sameAs' array linking to external knowledge bases (only if officially verified profiles exist on Wikidata, Wikipedia, LinkedIn, etc.).",
                     "priority": "medium",
                     "remediation_details": 'Include "sameAs": ["https://www.wikidata.org/wiki/...", "https://www.linkedin.com/company/..."] in Organization JSON-LD.'
                 }
@@ -196,10 +236,14 @@ def run_schema_audit(target_url, raw_html=None):
         elif not matched_auth:
             findings.append({
                 "title": "Organization 'sameAs' links lack authoritative knowledge bases (Wikidata/Wikipedia/LinkedIn)",
-                "severity": "low",
-                "evidence": f"Discovered sameAs links: {all_same_as[:3]}, but none point to Wikidata, Wikipedia, Crunchbase, or LinkedIn.",
+                "severity": _cap_severity("low"),
+                "evidence": _ev(
+                    detail=f"Discovered {len(all_same_as)} sameAs link(s): {all_same_as[:3]}, but none point to Wikidata, Wikipedia, Crunchbase, or LinkedIn.",
+                    count=len(all_same_as),
+                    fetched_url=target_url
+                ),
                 "suggested_action": {
-                    "summary": "Corroborate brand identity by linking to your Wikidata QID or Crunchbase profile.",
+                    "summary": "Corroborate brand identity by linking to your Wikidata QID or Crunchbase profile (if they exist and are verified).",
                     "priority": "low",
                     "remediation_details": 'Ground brand identity in external knowledge graphs: add Wikidata URL (e.g. "https://www.wikidata.org/wiki/Q...") to the "sameAs" array.'
                 }
@@ -211,29 +255,31 @@ def run_schema_audit(target_url, raw_html=None):
     has_product_schema = any(t in ["Product", "Offer", "SoftwareApplication", "Service"] for t in schema_types)
 
     if has_pricing_signals and not has_product_schema:
+        # Check if the URL explicitly signals a commercial page to prevent false positives on blogs/homepages
+        is_commercial_page = any(kw in path for kw in ["pricing", "product", "buy", "subscribe", "store", "plan", "shop"])
+        
+        severity = "medium" if is_commercial_page else "info"
+        priority = "medium" if is_commercial_page else "info"
+        title = "Commercial or pricing content present without Product/Offer JSON-LD"
+        if not is_commercial_page:
+            title = "Consider Product/Offer JSON-LD for detected pricing signals"
+
         findings.append({
-            "title": "Commercial or pricing content present without Product/Offer JSON-LD",
-            "severity": "high",
-            "evidence": "Page contains commercial pricing keywords/indicators but lacks Product, SoftwareApplication, or Offer structured data.",
+            "title": title,
+            "severity": _cap_severity(severity),
+            "evidence": _ev(
+                detail="Page contains commercial pricing keywords/indicators but lacks Product, SoftwareApplication, or Offer structured data.",
+                count=len(pricing_pattern.findall(html)),
+                fetched_url=target_url
+            ),
             "suggested_action": {
                 "summary": "Add Product/Offer JSON-LD with price, priceCurrency, and description so AI search can directly answer pricing queries.",
-                "priority": "high",
+                "priority": priority,
                 "remediation_details": 'Define @type: "Product" with offers: { @type: "Offer", price: "...", priceCurrency: "USD" }.'
             }
         })
 
-    # 5. Check BreadcrumbList schema
-    if "BreadcrumbList" not in schema_types:
-        findings.append({
-            "title": "Missing BreadcrumbList Schema for topical hierarchy",
-            "severity": "low",
-            "evidence": "No BreadcrumbList schema found. Limits AI understanding of site hierarchy and parent category relationships.",
-            "suggested_action": {
-                "summary": "Implement BreadcrumbList JSON-LD to explicitly communicate site navigation taxonomy.",
-                "priority": "low",
-                "remediation_details": 'Add BreadcrumbList JSON-LD: <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://example.com"}]}</script>'
-            }
-        })
+
 
     return findings
 

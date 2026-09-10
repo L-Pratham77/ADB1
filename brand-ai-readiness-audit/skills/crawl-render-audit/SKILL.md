@@ -4,7 +4,7 @@ description: Audit a website's technical crawlability, robots.txt directives for
 license: Apache-2.0
 allowed-tools: [python, bash]
 metadata:
-  version: "1.0.0"
+  version: "2.1.0"
   category: "ai-discoverability"
   framework: "agentskills.io"
 ---
@@ -47,7 +47,11 @@ Emits a list of finding dictionaries conforming to the standard schema:
   {
     "title": "AI search and citation bots explicitly blocked in robots.txt (ChatGPT-User, PerplexityBot)",
     "severity": "critical",
-    "evidence": "robots.txt disallows root access for live assistant citation agents.",
+    "evidence": {
+      "detail": "robots.txt disallows root access for live assistant citation agents.",
+      "count": 1,
+      "fetched_url": "https://example.com/robots.txt"
+    },
     "suggested_action": {
       "summary": "Allow citation crawlers in robots.txt so AI assistants can verify and cite your domain in user answers.",
       "priority": "critical",

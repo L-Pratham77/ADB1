@@ -1,0 +1,171 @@
+{
+  "site": "vercel.com",
+  "audited_at": "2026-09-10T02:10:47Z",
+  "audit_metadata": {
+    "version": "2.1.0",
+    "skills_run": [
+      "structured-data-entity-audit",
+      "crawl-render-audit",
+      "content-quotability-audit",
+      "on-site-engagement-audit"
+    ],
+    "checks_skipped": [],
+    "mode": "live"
+  },
+  "summary": {
+    "total_findings": 7,
+    "critical": 0,
+    "high": 1,
+    "medium": 5,
+    "low": 0,
+    "info": 1,
+    "checks_skipped": 0,
+    "degraded": false,
+    "pages_by_type": {
+      "home": 1,
+      "subpages": 2,
+      "checked_live": 3
+    },
+    "ai_readiness_score": 85,
+    "previous_score": 85,
+    "score_trend": 0,
+    "score_basis": "Averaged across 3 page(s). Total findings: critical=0, high=1, medium=5, low=0",
+    "scores": {
+      "discoverability": 87,
+      "engagement": 98
+    }
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "Critical factual data (pricing/specs/tables) locked in raster images without alt text",
+      "severity": "high",
+      "evidence": {
+        "detail": "Discovered 2 image(s) with filenames matching key factual concepts (/vc-ap-vercel-marketing/_next/image?url=%2Fvc-ap-vercel-marketing%2F_next%2Fstatic%2Fimmutable%2Fmedia%2Ffallback-dark-glow-mobile.3b4fyu5pe7opg.webp&w=3840&q=95, /vc-ap-vercel-marketing/_next/image?url=%2Fvc-ap-vercel-marketing%2F_next%2Fstatic%2Fimmutable%2Fmedia%2Ffallback-dark-glow-desktop.25ylksegigbc-.webp&w=3840&q=95) lacking descriptive alt text or HTML fallback.",
+        "count": 2,
+        "fetched_url": "https://vercel.com"
+      },
+      "suggested_action": {
+        "summary": "Convert visual diagrams and pricing graphics into native semantic HTML tables or provide comprehensive alt descriptions.",
+        "priority": "high",
+        "remediation_details": "AI search assistants cannot OCR images during real-time retrieval. Supply full text tables or detailed alt attributes."
+      }
+    },
+    {
+      "id": "F-002",
+      "title": "Low raw-HTML text density detected",
+      "severity": "medium",
+      "evidence": {
+        "detail": "Page payload is 525,457 bytes but contains only 3,693 characters of visible text (0.7% ratio).",
+        "count": 3693,
+        "fetched_url": "https://vercel.com"
+      },
+      "suggested_action": {
+        "summary": "Verify that important content is server-readable.",
+        "priority": "medium",
+        "remediation_details": "Extract inline script bundles to deferred external assets and pre-render factual text:\n<script src=\"/static/bundle.js\" defer></script>"
+      }
+    },
+    {
+      "id": "F-003",
+      "title": "Missing atomic entity definition statement in introductory section",
+      "severity": "medium",
+      "evidence": {
+        "detail": "Opening 150 words lack a definitive subject-predicate-object identity declaration (e.g. '[Brand] is an automated...').",
+        "count": 0,
+        "fetched_url": "https://vercel.com"
+      },
+      "suggested_action": {
+        "summary": "Add a crisp, one-sentence canonical definition of the brand/product in the hero paragraph.",
+        "priority": "medium",
+        "remediation_details": "Structure the opening hero sentence as: '[Brand] is a [category] that [primary benefit] for [target audience].'"
+      }
+    },
+    {
+      "id": "F-004",
+      "title": "Overly brief or vague <h1> headline ('Agentic Infrastructure')",
+      "severity": "medium",
+      "evidence": {
+        "detail": "Primary heading has only 2 word(s). Fails to convey a complete value proposition.",
+        "count": 2,
+        "fetched_url": "https://vercel.com"
+      },
+      "suggested_action": {
+        "summary": "Expand the <h1> to explicitly state the category, core benefit, and target user.",
+        "priority": "medium",
+        "remediation_details": "Update <h1> to include a clear benefit and category statement (e.g., 'Automated Cloud Telemetry & AI Readiness Auditing for Enterprise Engineering Teams')."
+      }
+    },
+    {
+      "id": "F-005",
+      "title": "Missing 'sameAs' entity corroboration links in Organization schema",
+      "severity": "medium",
+      "evidence": {
+        "detail": "Organization schema found, but 'sameAs' property is missing or empty. Increases risk of entity ambiguity and hallucination.",
+        "count": 0,
+        "fetched_url": "https://vercel.com/products/observability"
+      },
+      "suggested_action": {
+        "summary": "Add 'sameAs' array linking to external knowledge bases (only if officially verified profiles exist on Wikidata, Wikipedia, LinkedIn, etc.).",
+        "priority": "medium",
+        "remediation_details": "Include \"sameAs\": [\"https://www.wikidata.org/wiki/...\", \"https://www.linkedin.com/company/...\"] in Organization JSON-LD."
+      }
+    },
+    {
+      "id": "F-006",
+      "title": "No Schema.org structured data (JSON-LD or Microdata) found",
+      "severity": "medium",
+      "evidence": {
+        "detail": "Crawled page; found 0 JSON-LD blocks and 0 Microdata itemscope tags. AI assistants cannot extract structured factual triples without inference.",
+        "count": 0,
+        "fetched_url": "https://vercel.com/products/previews"
+      },
+      "suggested_action": {
+        "summary": "Inject Schema.org JSON-LD structured data for Organization, WebSite, and primary offerings.",
+        "priority": "medium",
+        "remediation_details": "Add an <script type='application/ld+json'> block in <head> defining Organization and WebSite schemas."
+      }
+    },
+    {
+      "id": "F-007",
+      "title": "Excellent On-Site Engagement & Visitor Orientation",
+      "severity": "info",
+      "evidence": {
+        "detail": "Value proposition clarity & above-the-fold topic match confirmed via semantic <h1>. CTA relevance established (1 high-intent buttons). Clear navigation/orientation (<nav> present). Strong content-to-intent match (0 dense text walls).",
+        "count": 1,
+        "fetched_url": "https://vercel.com/products/observability"
+      },
+      "suggested_action": {
+        "summary": "Maintain this high standard of cognitive clarity and strong value propositions.",
+        "priority": "info",
+        "remediation_details": "No action needed."
+      }
+    }
+  ],
+  "proactive_recommendations": [
+    {
+      "area": "AI Discoverability",
+      "title": "Publish Curated /llms.txt Machine Index",
+      "impact": "Enables emerging AI agents (ChatGPT Search, Perplexity, Claude) to ingest documentation and product specs without parsing complex HTML/CSS layouts.",
+      "action": "Create https://vercel.com/llms.txt containing structured markdown summaries of products, pricing, and API endpoints."
+    },
+    {
+      "area": "AI Discoverability",
+      "title": "Canonical Wikidata & Knowledge Graph Grounding",
+      "impact": "Eliminates entity ambiguity across foundation models and establishes permanent corporate entity authority in Google Knowledge Graph and Microsoft Satori.",
+      "action": "Link your organization's official Wikidata item (QID) and Wikipedia entry in the 'sameAs' array of Schema.org Organization JSON-LD."
+    },
+    {
+      "area": "On-Site Engagement",
+      "title": "Context-Preserving Landing Experience for AI Referrals",
+      "impact": "Prevents immediate bounce for users arriving from AI assistant search citations by greeting them with modular, scannable proof points.",
+      "action": "Ensure key feature and pricing pages display clear breadcrumbs and a 3-second value proposition directly confirming the topic highlighted in AI citations."
+    },
+    {
+      "area": "AI Discoverability",
+      "title": "Proactive FAQ Schema for High-Intent Conversational Queries",
+      "impact": "Directly feeds question-and-answer pairs into AI search engines, securing featured snippets and conversational citation cards.",
+      "action": "Deploy Schema.org FAQPage structured data on key product pages answering top customer queries (pricing, integrations, enterprise security)."
+    }
+  ]
+}

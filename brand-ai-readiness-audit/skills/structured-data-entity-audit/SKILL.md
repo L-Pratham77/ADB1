@@ -4,7 +4,7 @@ description: Audit website structured data, Schema.org JSON-LD and Microdata imp
 license: Apache-2.0
 allowed-tools: [python, bash]
 metadata:
-  version: "1.0.0"
+  version: "2.1.0"
   category: "ai-discoverability"
   framework: "agentskills.io"
 ---
@@ -44,7 +44,11 @@ Emits finding objects matching the standardized audit schema:
   {
     "title": "Missing 'sameAs' entity corroboration links in Organization schema",
     "severity": "medium",
-    "evidence": "Organization schema found, but 'sameAs' property is missing or empty.",
+    "evidence": {
+      "detail": "Organization schema found, but 'sameAs' property is missing or empty.",
+      "count": 0,
+      "fetched_url": "https://example.com"
+    },
     "suggested_action": {
       "summary": "Add 'sameAs' array linking to verified external knowledge bases (Wikidata, Wikipedia, LinkedIn).",
       "priority": "medium"

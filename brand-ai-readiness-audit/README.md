@@ -27,7 +27,7 @@ brand-ai-readiness-audit/
 ├── README.md                                # Root documentation & composition guide
 ├── HOW_TO_RUN.txt                           # Running instructions & quick-start guide
 ├── run_audit.py                             # Single 1-command execution launcher
-├── test_runner.py                           # Automated test suite (13 unit & integration tests)
+├── test_runner.py                           # Automated test suite (17 unit, e2e & integration tests)
 ├── package_submission.py                    # Submission packaging and verification utility
 └── skills/
     ├── audit-orchestrator/                  # [ENTRYPOINT] Coordinates all skills & emits final report
@@ -110,7 +110,9 @@ Rather than acting as a naive pass-through, `audit-orchestrator` implements **de
   synthesizing the evidence and providing clear remediation.
 * **100% Copy-Pasteable Remediations**: Every finding emitted includes a concrete, mechanism-sound code snippet in `suggested_action.remediation_details` (e.g., exact Schema.org JSON-LD blocks, Nginx `X-Robots-Tag` headers, OpenGraph `<head>` tags, and `/llms.txt` templates).
 * **Quantitative Scoring**: Computes a weighted overall `ai_readiness_score` (0–100) and domain sub-scores (`discoverability` and `engagement`).
-* **Proactive Beyond-Defect Recommendations**: Synthesizes forward-looking actions (curated `/llms.txt`, Wikidata entity grounding, FAQ Schema) that elevate a site even where no technical bug was found.
+* **Multi-Page Extrapolation**: The orchestrator is not limited to single pages. It parses live HTML for key structural subpages (e.g., `/pricing`, `/docs`) and runs the skills across multiple targets in a single unified run.
+* **Historical Score Deltas**: Automatically reads previous outputs (if present) to compute an `ai_readiness_score` delta (e.g. `(↑ +12 since last run)`), supporting continuous telemetry.
+* **Proactive Beyond-Defect Recommendations**: Synthesizes forward-looking actions (curated `/llms.txt` grading, Wikidata entity grounding, FAQ Schema) that elevate a site even where no technical bug was found.
 
 ---
 
@@ -122,13 +124,30 @@ The output conforms to the required hackathon schema:
 {
   "site": "example.com",
   "audited_at": "2026-09-20T14:32:00Z",
+  "audit_metadata": {
+    "version": "2.1.0",
+    "skills_run": ["crawl-render-audit", "structured-data-entity-audit", "content-quotability-audit", "on-site-engagement-audit"],
+    "checks_skipped": [],
+    "mode": "live"
+  },
   "summary": {
     "total_findings": 6,
     "critical": 1,
     "high": 2,
     "medium": 3,
     "low": 0,
+    "info": 0,
+    "checks_skipped": 0,
+    "degraded": false,
+    "pages_by_type": {
+      "home": 1,
+      "subpages": 2,
+      "checked_live": 3
+    },
     "ai_readiness_score": 67,
+    "previous_score": 55,
+    "score_trend": 12,
+    "score_basis": "Weighted deduction from 6 finding(s)...",
     "scores": {
       "discoverability": 65,
       "engagement": 70
@@ -139,7 +158,11 @@ The output conforms to the required hackathon schema:
       "id": "F-001",
       "title": "No JSON-LD structured data on product pages",
       "severity": "high",
-      "evidence": "Crawled product page; contains 0 schema.org markup blocks.",
+      "evidence": {
+        "detail": "Crawled product page; contains 0 schema.org markup blocks.",
+        "count": 0,
+        "fetched_url": "https://example.com/products"
+      },
       "suggested_action": {
         "summary": "Add Product/Offer JSON-LD to every product page.",
         "priority": "high",
@@ -193,7 +216,7 @@ python run_audit.py example.com --offline-html /path/to/page.html --offline-robo
 ```bash
 python test_runner.py
 ```
-Executes **13 unit and integration tests** verifying `agentskills.io` compliance, manifest validity, RFC 9309 robots boundaries, WAF detection, CSR hydration, nested tag preservation, international currencies, OpenGraph checks, and schema validation.
+Executes **17 unit and e2e integration tests** verifying `agentskills.io` compliance, manifest validity, RFC 9309 robots boundaries, WAF detection, structured evidence object enforcement, and runs a real e2e audit via a local `http.server` socket.
 
 ### 5. Packaging the Submission
 ```bash
@@ -209,4 +232,4 @@ Validates all marketplace manifests, tests execution speed, and produces `brand-
 * **Polite Execution**: Employs configurable timeouts, user-agent identification, and robots.txt adherence.
 * **Zero Dependencies**: Requires no `pip install` or external binaries. Runs natively in any standard Python environment.
 * **Sandbox Safe**: Self-contained package under 70 KB (well below the 50 MB limit).
-* **Execution Speed**: Full multi-skill audit finishes in 4–8 seconds (well below the 5-minute ceiling).
+* **Execution Speed**: Strict timeout bounds: Network requests use bounded timeouts, and parallel workers prevent slow subpages from blocking the overall audit indefinitely. This keeps typical multi-page audits well within the 5-minute runtime requirement.

@@ -4,7 +4,7 @@ description: Audit web content for AI assistant retrieval (RAG) quotability, sig
 license: Apache-2.0
 allowed-tools: [python, bash]
 metadata:
-  version: "1.0.0"
+  version: "2.1.0"
   category: "ai-discoverability"
   framework: "agentskills.io"
 ---
@@ -46,7 +46,11 @@ Emits finding dictionaries complying with the standardized schema:
   {
     "title": "Missing OpenGraph (og:title, og:description) metadata for AI search citation cards",
     "severity": "medium",
-    "evidence": "Page lacks og:title and og:description. AI assistant search cards rely on OpenGraph tags to render rich preview snippets.",
+    "evidence": {
+      "detail": "Page lacks og:title and og:description. AI assistant search cards rely on OpenGraph tags to render rich preview snippets.",
+      "count": 0,
+      "fetched_url": "https://example.com"
+    },
     "suggested_action": {
       "summary": "Add OpenGraph meta tags in <head> for crisp, branded citation card previews in AI assistants.",
       "priority": "medium",

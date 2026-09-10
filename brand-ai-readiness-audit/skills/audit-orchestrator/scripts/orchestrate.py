@@ -3,12 +3,18 @@
 Audit Orchestrator (Entrypoint Skill Execution Engine)
 Coordinates domain skills, aggregates findings across Discoverability & Engagement,
 generates proactive recommendations, and emits the standardized audit report.
+
+Gap fixes (Phase 1):
+  - Import errors are now logged explicitly instead of silently swallowed.
+  - Skills that throw exceptions are tracked and surfaced in checks_skipped.
+  - checks_skipped and degraded are propagated to the final report summary.
 """
 
 import sys
 import os
 import re
 import json
+import logging
 import argparse
 from urllib.parse import urlparse
 from datetime import datetime, timezone
@@ -23,15 +29,43 @@ sys.path.insert(0, os.path.join(SKILLS_DIR, "content-quotability-audit", "script
 sys.path.insert(0, os.path.join(SKILLS_DIR, "on-site-engagement-audit", "scripts"))
 sys.path.insert(0, CURRENT_DIR)
 
+# --- Import skills with explicit error reporting (no bare except: pass) ---
+_import_errors = []
+
 try:
     from crawler import run_crawl_audit, fetch_url
+except ImportError as e:
+    _import_errors.append(f"crawl-render-audit: {e}")
+    run_crawl_audit = None
+    fetch_url = None
+
+try:
     from schema_inspector import run_schema_audit
+except ImportError as e:
+    _import_errors.append(f"structured-data-entity-audit: {e}")
+    run_schema_audit = None
+
+try:
     from quotability_analyzer import run_quotability_audit
+except ImportError as e:
+    _import_errors.append(f"content-quotability-audit: {e}")
+    run_quotability_audit = None
+
+try:
     from engagement_evaluator import run_engagement_audit
+except ImportError as e:
+    _import_errors.append(f"on-site-engagement-audit: {e}")
+    run_engagement_audit = None
+
+try:
     from report_formatter import build_final_report, render_markdown_report
 except ImportError as e:
-    # Graceful fallback if invoked in different paths
-    pass
+    _import_errors.append(f"report_formatter: {e}")
+    build_final_report = None
+    render_markdown_report = None
+
+if _import_errors:
+    logging.warning("Skill import failures detected: %s", "; ".join(_import_errors))
 
 
 def normalize_target_url(raw_target):
@@ -80,88 +114,147 @@ def generate_proactive_recommendations(site_name, findings):
     return recommendations
 
 
-def run_full_audit(target_input, raw_html=None, raw_robots=None):
+def run_full_audit(target_input, raw_html=None, raw_robots=None, previous_score=None):
     """
     Executes the multi-skill audit across all 4 domain skills,
     aggregates results, and builds the finalized compliant report.
     """
+    from urllib.parse import urljoin
     target_url, site_name = normalize_target_url(target_input)
 
     # 1. Fetch live page once if offline content not provided
     cached_html = raw_html
     cached_robots = raw_robots
+    live_fetch = raw_html is None  # True when we go to the network
 
-    if cached_html is None:
+    urls_to_audit = [(target_url, cached_html, cached_robots)]
+
+    if cached_html is None and fetch_url is not None:
         try:
             _, _, cached_html = fetch_url(target_url, timeout=7)
+            # Fetch robots.txt once globally to prevent redundant requests
+            if cached_robots is None:
+                robots_url = urljoin(target_url, "/robots.txt")
+                try:
+                    _, _, cached_robots = fetch_url(robots_url, timeout=5)
+                except Exception:
+                    cached_robots = ""
+                    
+            urls_to_audit[0] = (target_url, cached_html, cached_robots)
+            
+            # Find subpages for a true Multi-Page Audit
+            if cached_html:
+                sub_links = []
+                for match in re.finditer(r'href=["\'](/[^"\']+)["\']', cached_html):
+                    path = match.group(1)
+                    if any(kw in path.lower() for kw in ["/pricing", "/about", "/product", "/features", "/docs"]):
+                        sub_url = urljoin(target_url, path)
+                        if sub_url not in sub_links and sub_url != target_url:
+                            sub_links.append(sub_url)
+                            if len(sub_links) >= 2:
+                                break
+                                
+                if sub_links:
+                    import concurrent.futures
+                    def fetch_subpage(s_url):
+                        try:
+                            _, _, s_html = fetch_url(s_url, timeout=5)
+                            return (s_url, s_html, cached_robots)
+                        except Exception:
+                            return (s_url, "", cached_robots)
+                            
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        results = list(executor.map(fetch_subpage, sub_links))
+                        urls_to_audit.extend(results)
+                        
         except Exception:
-            cached_html = ""
+            urls_to_audit[0] = (target_url, "", cached_robots)
 
     all_findings = []
+    skills_run = set()
+    checks_skipped = set()
 
-    # 2. Execute Skill 1: Crawl & Render Audit
-    try:
-        from crawler import run_crawl_audit
-        crawl_findings = run_crawl_audit(target_url, raw_html=cached_html, raw_robots=cached_robots)
-        for f in crawl_findings:
-            f["area"] = "AI Discoverability"
-        all_findings.extend(crawl_findings)
-    except Exception as e:
-        all_findings.append({
-            "title": "Crawl & Render audit encountered execution exception",
-            "severity": "low",
-            "area": "AI Discoverability",
-            "evidence": str(e),
-            "suggested_action": {"summary": "Verify network connectivity and retry.", "priority": "low", "remediation_details": "Ensure target URL is reachable via HTTPS."}
-        })
+    # Run skills across all discovered URLs
+    for url, html, robots in urls_to_audit:
 
-    # 3. Execute Skill 2: Structured Data & Entity Authority Audit
-    try:
-        from schema_inspector import run_schema_audit
-        schema_findings = run_schema_audit(target_url, raw_html=cached_html)
-        for f in schema_findings:
-            f["area"] = "AI Discoverability"
-        all_findings.extend(schema_findings)
-    except Exception as e:
-        all_findings.append({
-            "title": "Structured Data audit encountered execution exception",
-            "severity": "low",
-            "area": "AI Discoverability",
-            "evidence": str(e),
-            "suggested_action": {"summary": "Verify JSON-LD parser and retry.", "priority": "low", "remediation_details": "Ensure structured data is valid JSON."}
-        })
+        if run_crawl_audit is not None:
+            try:
+                crawl_findings = run_crawl_audit(url, raw_html=html, raw_robots=robots)
+                for f in crawl_findings:
+                    f["area"] = "AI Discoverability"
+                all_findings.extend(crawl_findings)
+                skills_run.add("crawl-render-audit")
+            except Exception as e:
+                checks_skipped.add("crawl-render-audit")
+                all_findings.append({
+                    "title": "Crawl & Render audit encountered execution exception",
+                    "severity": "low",
+                    "area": "AI Discoverability",
+                    "evidence": {"detail": str(e), "count": 0, "fetched_url": url},
+                    "suggested_action": {"summary": "Verify network connectivity and retry.", "priority": "low", "remediation_details": "Ensure target URL is reachable via HTTPS."}
+                })
+        else:
+            checks_skipped.add("crawl-render-audit")
 
-    # 4. Execute Skill 3: Content Quotability & RAG Retrieval Audit
-    try:
-        from quotability_analyzer import run_quotability_audit
-        quotability_findings = run_quotability_audit(target_url, raw_html=cached_html)
-        for f in quotability_findings:
-            f["area"] = "AI Discoverability"
-        all_findings.extend(quotability_findings)
-    except Exception as e:
-        all_findings.append({
-            "title": "Content Quotability audit encountered execution exception",
-            "severity": "low",
-            "area": "AI Discoverability",
-            "evidence": str(e),
-            "suggested_action": {"summary": "Verify content tokenizer and retry.", "priority": "low", "remediation_details": "Check HTML content encoding."}
-        })
+        # 3. Execute Skill 2: Structured Data & Entity Authority Audit
+        if run_schema_audit is not None:
+            try:
+                schema_findings = run_schema_audit(url, raw_html=html)
+                for f in schema_findings:
+                    f["area"] = "AI Discoverability"
+                all_findings.extend(schema_findings)
+                skills_run.add("structured-data-entity-audit")
+            except Exception as e:
+                checks_skipped.add("structured-data-entity-audit")
+                all_findings.append({
+                    "title": "Structured Data audit encountered execution exception",
+                    "severity": "low",
+                    "area": "AI Discoverability",
+                    "evidence": {"detail": str(e), "count": 0, "fetched_url": url},
+                    "suggested_action": {"summary": "Verify JSON-LD parser and retry.", "priority": "low", "remediation_details": "Ensure structured data is valid JSON."}
+                })
+        else:
+            checks_skipped.add("structured-data-entity-audit")
 
-    # 5. Execute Skill 4: On-Site Engagement & Orientation Audit
-    try:
-        from engagement_evaluator import run_engagement_audit
-        engagement_findings = run_engagement_audit(target_url, raw_html=cached_html)
-        for f in engagement_findings:
-            f["area"] = "On-Site Engagement"
-        all_findings.extend(engagement_findings)
-    except Exception as e:
-        all_findings.append({
-            "title": "On-Site Engagement audit encountered execution exception",
-            "severity": "low",
-            "area": "On-Site Engagement",
-            "evidence": str(e),
-            "suggested_action": {"summary": "Verify engagement extractor and retry.", "priority": "low", "remediation_details": "Ensure DOM contains valid HTML elements."}
-        })
+        # 4. Execute Skill 3: Content Quotability & RAG Retrieval Audit
+        if run_quotability_audit is not None:
+            try:
+                quotability_findings = run_quotability_audit(url, raw_html=html)
+                for f in quotability_findings:
+                    f["area"] = "AI Discoverability"
+                all_findings.extend(quotability_findings)
+                skills_run.add("content-quotability-audit")
+            except Exception as e:
+                checks_skipped.add("content-quotability-audit")
+                all_findings.append({
+                    "title": "Content Quotability audit encountered execution exception",
+                    "severity": "low",
+                    "area": "AI Discoverability",
+                    "evidence": {"detail": str(e), "count": 0, "fetched_url": url},
+                    "suggested_action": {"summary": "Verify content tokenizer and retry.", "priority": "low", "remediation_details": "Check HTML content encoding."}
+                })
+        else:
+            checks_skipped.add("content-quotability-audit")
+
+        # 5. Execute Skill 4: On-Site Engagement & Orientation Audit
+        if run_engagement_audit is not None:
+            try:
+                engagement_findings = run_engagement_audit(url, raw_html=html)
+                for f in engagement_findings:
+                    f["area"] = "On-Site Engagement"
+                all_findings.extend(engagement_findings)
+                skills_run.add("on-site-engagement-audit")
+            except Exception as e:
+                checks_skipped.add("on-site-engagement-audit")
+                all_findings.append({
+                    "title": "On-Site Engagement audit encountered execution exception",
+                    "severity": "low",
+                    "area": "On-Site Engagement",
+                    "evidence": {"detail": str(e), "count": 0, "fetched_url": url},
+                    "suggested_action": {"summary": "Verify engagement extractor and retry.", "priority": "low", "remediation_details": "Ensure DOM contains valid HTML elements."}
+                })
+        else:
+            checks_skipped.add("on-site-engagement-audit")
 
     # 6. Harmonize cross-cutting findings and deduplicate
     has_crawl_h1 = any("Missing semantic <h1> heading in initial HTML response" in f.get("title", "") for f in all_findings)
@@ -170,10 +263,14 @@ def run_full_audit(target_input, raw_html=None, raw_robots=None):
     harmonized_list = []
     if has_crawl_h1 and has_engagement_h1:
         harmonized_list.append({
-            "title": "Missing <h1> headline (critical for both AI topic extraction and visitor orientation)",
-            "severity": "high",
+            "title": "Missing primary <h1> headline",
+            "severity": "medium",
             "area": "Cross-Cutting",
-            "evidence": "Initial HTML response contains 0 <h1> elements. Both AI citation bots and arriving visitors lack a primary subject anchor to confirm topic match.",
+            "evidence": {
+                "detail": "Initial HTML response contains 0 <h1> elements. Both AI citation bots and arriving visitors lack a primary subject anchor to confirm topic match.",
+                "count": 0,
+                "fetched_url": target_url
+            },
             "suggested_action": {
                 "summary": "Add a prominent, server-rendered <h1> headline above the fold clearly defining the product and topic.",
                 "priority": "high",
@@ -199,11 +296,17 @@ def run_full_audit(target_input, raw_html=None, raw_robots=None):
     proactive = generate_proactive_recommendations(site_name, deduped_findings)
 
     # 8. Build final schema-conforming report
-    from report_formatter import build_final_report
+    degraded = len(checks_skipped) > 0
     report = build_final_report(
         site=site_name,
         findings=deduped_findings,
-        proactive_recommendations=proactive
+        proactive_recommendations=proactive,
+        checks_skipped=list(checks_skipped),
+        degraded=degraded,
+        skills_run=list(skills_run),
+        mode="offline" if not live_fetch else "live",
+        previous_score=previous_score,
+        pages_audited=len(urls_to_audit)
     )
 
     return report
@@ -230,8 +333,17 @@ def main():
     if args.offline_robots and os.path.exists(args.offline_robots):
         with open(args.offline_robots, "r", encoding="utf-8", errors="replace") as f:
             raw_robots = f.read()
+            
+    previous_score = None
+    if args.output and os.path.exists(args.output):
+        try:
+            with open(args.output, "r", encoding="utf-8") as f:
+                old_report = json.load(f)
+                previous_score = old_report.get("summary", {}).get("ai_readiness_score")
+        except Exception:
+            pass
 
-    report = run_full_audit(args.target, raw_html=raw_html, raw_robots=raw_robots)
+    report = run_full_audit(args.target, raw_html=raw_html, raw_robots=raw_robots, previous_score=previous_score)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
@@ -242,8 +354,11 @@ def main():
         print(json.dumps(report, indent=2))
 
     if args.format in ["markdown", "both"]:
-        from report_formatter import render_markdown_report
-        print("\n" + render_markdown_report(report))
+        md_text = "\n" + render_markdown_report(report)
+        try:
+            print(md_text)
+        except UnicodeEncodeError:
+            print(md_text.encode("utf-8", errors="replace").decode("cp1252", errors="replace"))
 
 
 if __name__ == "__main__":
