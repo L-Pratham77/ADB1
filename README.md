@@ -1,5 +1,5 @@
 # Brand AI-Readiness Audit Marketplace
-> **Adobe University Hackathon 2026 — Round 3**  
+> *v2.0.1*  
 > An automated, multi-skill evaluation engine for assessing and remediating website **AI Discoverability** and **On-Site Engagement**.
 
 [![Tests](https://img.shields.io/badge/tests-17%20passed-brightgreen)](#automated-test-suite)
